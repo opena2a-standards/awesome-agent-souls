@@ -1,6 +1,6 @@
 # Awesome Agent Souls
 
-**A curated collection of SOUL.md identity files for AI agents -- organized by role, industry, and organization type.**
+**A curated collection of SOUL.md identity files for AI agents -- organized by role, industry, organization type, and fleet.**
 
 ---
 
@@ -10,14 +10,84 @@ This list is **tool-agnostic** (works with any AI coding assistant that reads ma
 
 Think of it as `.editorconfig` for AI agent behavior: a portable, human-readable file that travels with your project and tells any AI assistant *who it should be* when working in that codebase.
 
-**44 souls** across three dimensions: 25 by-role, 10 by-industry, 7 by-org-type, plus 2 starter examples.
+**100+ souls** across four dimensions: 25 by-role, 10 by-industry, 7 by-org-type, 15 by-fleet, plus 2 starter examples.
+
+---
+
+## Where SOUL.md Lives
+
+Place `SOUL.md` in your **project root** -- the same directory as `package.json`, `go.mod`, `Cargo.toml`, or whatever marks the top of your repository. This is the same convention used by `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and other AI instruction files.
+
+```
+my-project/
+  SOUL.md              <-- agent identity (who it is)
+  CLAUDE.md            <-- tool-specific instructions (optional)
+  AGENTS.md            <-- tool-specific instructions (optional)
+  package.json
+  src/
+  ...
+```
+
+### How AI Tools Discover It
+
+AI coding tools read project-level instruction files from the repository root at the start of each session. The soul file works the same way -- it is loaded into the agent's context before it starts working.
+
+| Tool | Native File | How to Use SOUL.md |
+|------|------------|-------------------|
+| Claude Code | `CLAUDE.md` | Rename to `CLAUDE.md`, or add `See SOUL.md for agent identity` in your CLAUDE.md |
+| Cursor | `.cursorrules` | Rename to `.cursorrules`, or reference SOUL.md from `.cursorrules` |
+| Windsurf | `.windsurfrules` | Rename to `.windsurfrules`, or reference SOUL.md |
+| GitHub Copilot | `.github/copilot-instructions.md` | Copy to `.github/copilot-instructions.md` |
+| Aider | `.aider.conf.yml` | Reference via `read:` directive |
+| Any tool | Varies | Most tools that read markdown from project root will pick up `SOUL.md` directly |
+
+**Recommended approach**: Keep `SOUL.md` as the canonical source, then reference it from tool-specific files. This avoids maintaining multiple copies.
+
+```markdown
+# CLAUDE.md
+See SOUL.md in this repository for the agent's identity, values, and boundaries.
+Follow all instructions in SOUL.md.
+```
+
+### For Fleets
+
+When deploying multiple agents, place soul files in a `souls/` or `fleet/` directory:
+
+```
+my-project/
+  SOUL.md              <-- primary agent identity
+  fleet/
+    FLEET.md           <-- coordination protocol
+    recon-agent.md     <-- specialist agent 1
+    exploit-agent.md   <-- specialist agent 2
+    report-agent.md    <-- specialist agent 3
+```
+
+Each agent in the fleet gets its own soul file. The `FLEET.md` defines how they coordinate -- handoff rules, shared artifacts, escalation paths, and which coordination pattern to use (sequential, parallel, hub-spoke, or mesh).
+
+### For Monorepos
+
+Place a root-level `SOUL.md` for shared identity, and per-package souls for specialization:
+
+```
+monorepo/
+  SOUL.md              <-- shared values and boundaries
+  packages/
+    api/
+      SOUL.md          <-- backend-specific identity
+    web/
+      SOUL.md          <-- frontend-specific identity
+    shared/
+      SOUL.md          <-- library-specific identity
+```
 
 ---
 
 ## Contents
 
+- [Where SOUL.md Lives](#where-soulmd-lives)
 - [Quick Start](#quick-start)
-- [The Three-Dimensional Taxonomy](#the-three-dimensional-taxonomy)
+- [The Four-Dimensional Taxonomy](#the-four-dimensional-taxonomy)
 - [Combining Souls](#combining-souls)
 - [By Role (25 souls)](#by-role-25-souls)
   - [Security](#security)
@@ -28,6 +98,7 @@ Think of it as `.editorconfig` for AI agent behavior: a portable, human-readable
   - [Creative](#creative)
 - [By Industry (10 souls)](#by-industry-10-souls)
 - [By Organization Type (7 souls)](#by-organization-type-7-souls)
+- [By Fleet (15 teams)](#by-fleet-15-teams)
 - [Starter Examples (2 templates)](#starter-examples-2-templates)
 - [Guides](#guides)
 - [Soul Integrity](#soul-integrity)
@@ -69,7 +140,16 @@ If your project operates in a regulated or specialized industry, layer in domain
 cat souls/by-industry/healthcare/healthcare-agent.md >> ./SOUL.md
 ```
 
-**Step 4: Verify integrity.**
+**Step 4: Deploy a full team.**
+
+Copy a fleet directory for coordinated multi-agent operations:
+
+```bash
+# Deploy a red team operations fleet
+cp -r souls/by-fleet/red-team-ops/ ./fleet/
+```
+
+**Step 5: Verify integrity.**
 
 Sign your soul file to detect tampering:
 
@@ -78,21 +158,22 @@ npx opena2a-cli guard sign SOUL.md
 npx opena2a-cli guard verify
 ```
 
-Most AI coding tools that support project-level instructions will pick up `SOUL.md` from the project root. For tools that use a different filename (e.g., `CLAUDE.md`, `.cursorrules`), rename or symlink accordingly.
+See [Where SOUL.md Lives](#where-soulmd-lives) above for tool-specific placement and discovery details.
 
 ---
 
-## The Three-Dimensional Taxonomy
+## The Four-Dimensional Taxonomy
 
-Agent souls in this collection are organized along three independent dimensions:
+Agent souls in this collection are organized along four independent dimensions:
 
 | Dimension | Question it answers | Count | Example |
 |-----------|-------------------|-------|---------|
 | **By Role** | What do you do? | 25 | Penetration tester, ML engineer, SRE |
 | **By Industry** | Where do you work? | 10 | Healthcare (HIPAA), Fintech (PCI-DSS), Defense (ITAR) |
 | **By Org Type** | How does your organization operate? | 7 | Startup (speed), Enterprise (compliance), Government (FedRAMP) |
+| **By Fleet** | What team do you need? | 15 | Red Team Ops, Dev Squad, HR Operations |
 
-Each dimension is independent. A soul from one dimension can be combined with souls from any other dimension to create a highly specific agent identity tailored to your exact context.
+Each dimension is independent. A soul from one dimension can be combined with souls from any other dimension to create a highly specific agent identity tailored to your exact context. Fleets add a coordination layer -- instead of a single agent, you deploy a team of agents that work together with defined handoff rules and shared governance.
 
 ---
 
@@ -133,7 +214,24 @@ echo "" >> ./SOUL.md
 cat souls/by-org-type/government/government-agent.md >> ./SOUL.md
 ```
 
-After combining, review the merged file to resolve any conflicting instructions and sign it with `guard sign`.
+**Example: A fintech red team**
+
+Fleets can be combined with industry context to create domain-aware coordinated teams:
+
+```bash
+# Start with the Red Team Ops fleet
+cp -r souls/by-fleet/red-team-ops/ ./fleet/
+
+# Layer fintech context into each agent's soul
+for soul in ./fleet/*-SOUL.md; do
+  echo "" >> "$soul"
+  cat souls/by-industry/fintech/fintech-agent.md >> "$soul"
+done
+```
+
+This produces a coordinated offensive security team where each agent (recon, exploit, pivot, report) understands PCI-DSS, SOX, and financial system attack surfaces.
+
+After combining, review the merged files to resolve any conflicting instructions and sign them with `guard sign`.
 
 ---
 
@@ -242,6 +340,39 @@ Organization-type souls define *how the organization operates* -- its decision-m
 | [agency](souls/by-org-type/agency/agency-agent.md) | Client projects, multi-tenant delivery, rapid onboarding | Multiple codebases, client constraints, deadline-driven |
 | [open-source-foundation](souls/by-org-type/open-source-foundation/oss-foundation-agent.md) | Community governance, contributor experience, release management | Public scrutiny, backward compatibility, consensus-driven |
 | [research-lab](souls/by-org-type/research-lab/research-lab-agent.md) | Experimental code, reproducibility, publication support | Reproducibility requirements, data sharing mandates, citation standards |
+
+---
+
+## By Fleet (15 teams)
+
+Fleet souls define *coordinated teams* of AI agents that work together. Each fleet contains individual agent soul files plus a shared `FLEET.md` that defines the coordination protocol, handoff rules, and shared governance. Unlike individual souls, fleets model how agents collaborate -- who hands off to whom, what artifacts are shared, and how decisions are escalated.
+
+| Fleet | Team Size | Coordination | Focus |
+|-------|-----------|-------------|-------|
+| [Red Team Ops](souls/by-fleet/red-team-ops/) | 4 | Sequential | Offensive security operations: recon, exploit, pivot, report |
+| [SOC Defense](souls/by-fleet/soc-defense/) | 4 | Hub-spoke | Continuous security monitoring, threat hunting, incident triage |
+| [Incident Response](souls/by-fleet/incident-response-team/) | 5 | Hub-spoke | Active incident management: contain, analyze, recover, communicate |
+| [Dev Squad](souls/by-fleet/dev-squad/) | 5 | Mesh | Full-stack development: architect, backend, frontend, QA, DevOps |
+| [HR Operations](souls/by-fleet/hr-operations/) | 4 | Parallel | Employee lifecycle: recruit, onboard, manage, offboard |
+| [Sales Pipeline](souls/by-fleet/sales-pipeline/) | 4 | Sequential | B2B sales: qualify, discover, propose, close |
+| [Customer Success](souls/by-fleet/customer-success/) | 3 | Hub-spoke | Post-sale: CSM, support, enablement |
+| [Legal Ops](souls/by-fleet/legal-ops/) | 4 | Sequential | Contracts, compliance, IP, e-discovery |
+| [Content Factory](souls/by-fleet/content-factory/) | 4 | Sequential | Content pipeline: research, write, edit, publish |
+| [Data Analytics](souls/by-fleet/data-analytics/) | 4 | Hub-spoke | Data team: ingest, analyze, model, report |
+| [Compliance Audit](souls/by-fleet/compliance-audit/) | 4 | Sequential | Regulatory audit: scope, assess, remediate, report |
+| [DevRel Team](souls/by-fleet/devrel-team/) | 4 | Parallel | Developer relations: community, content, events, feedback |
+| [Executive Advisory](souls/by-fleet/executive-advisory/) | 4 | Parallel | Strategic advisory: strategy, finance, product, operations |
+| [Research Lab Team](souls/by-fleet/research-lab-team/) | 4 | Parallel | Academic research: literature, experiment, write, review |
+| [M&A Due Diligence](souls/by-fleet/m-and-a-due-diligence/) | 4 | Parallel | Technical due diligence: code, security, infra, integration |
+
+### Coordination Patterns
+
+Fleets use one of four coordination patterns defined in their `FLEET.md`:
+
+- **Sequential** -- Agents work in a pipeline. The output of one agent feeds directly into the next. Used when work has a natural linear progression (e.g., recon before exploit before report).
+- **Parallel** -- Agents work independently on different aspects of the same problem. Results are synthesized at the end. Used when tasks are independent and speed matters.
+- **Hub-spoke** -- One coordinating agent routes work to specialists and aggregates results. Used when a central decision-maker needs to triage and delegate.
+- **Mesh** -- All agents communicate directly with each other, typically through shared artifacts like pull requests or documents. Used when collaboration is fluid and any agent may need input from any other.
 
 ---
 
@@ -361,13 +492,14 @@ For a detailed comparison, see [Soul vs Skills guide](guides/soul-vs-skills.md).
 
 ## Contributing
 
-We welcome contributions across all three dimensions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting new souls, quality requirements, and the review process.
+We welcome contributions across all four dimensions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting new souls, quality requirements, and the review process.
 
 Areas where contributions are particularly valuable:
 
 - **By Industry:** Souls for industries not yet covered (insurance, agriculture, transportation, telecom)
 - **By Org Type:** Souls for organization types not yet covered (franchise, cooperative, academic department)
 - **By Role:** Souls for specialized roles (database administrator, QA engineer, technical product manager)
+- **By Fleet:** Teams for workflows not yet covered (marketing operations, product launch, security compliance)
 - **Starter Examples:** Templates for common project types (mobile app, CLI tool, microservice, data pipeline)
 
 ---

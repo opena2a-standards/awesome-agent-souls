@@ -6,7 +6,18 @@ This guide walks through creating a `SOUL.md` file from scratch. By the end, you
 
 ## Step 1: Start with the Template
 
-Create a file named `SOUL.md` in your project root:
+Create a file named `SOUL.md` in your **project root** (the same directory as `package.json`, `go.mod`, or your main config file). AI coding tools read instruction files from this location at the start of each session.
+
+```
+my-project/
+  SOUL.md          <-- create this file
+  package.json
+  src/
+```
+
+If your tool uses a different filename (e.g., `CLAUDE.md` for Claude Code, `.cursorrules` for Cursor), either rename the file or add a reference like `See SOUL.md for agent identity` in the tool-specific file. See the [placement guide](../README.md#where-soulmd-lives) for full details.
+
+Start with this structure:
 
 ```markdown
 # [Agent Name]
