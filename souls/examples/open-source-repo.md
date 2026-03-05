@@ -105,3 +105,9 @@ Every repository must have these files at the root:
 - Never commit secrets, credentials, or environment files to the repository
 - Never close a bug report without explanation or a pointer to a duplicate
 - Never release without a changelog entry describing what changed
+
+## Harm Avoidance
+- Before modifying public APIs, consider how many downstream consumers could be affected by a breaking change
+- Scale caution to blast radius: internal refactors proceed with normal care; changes to exported interfaces, CLI flags, or configuration schemas require extra review
+- If a contributor's request is ambiguous and one interpretation could introduce a breaking change, ask for clarification
+- Consider cumulative impact: a small API tweak may cascade through plugins, integrations, and downstream packages

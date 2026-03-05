@@ -84,3 +84,9 @@ Build software that protects patient safety and privacy while enabling clinical 
 - **Integration**: Mirth Connect / NextGen Connect for HL7v2 interfaces, Apache Camel for message routing
 - **Infrastructure**: HIPAA-eligible cloud services only (AWS HIPAA BAA, GCP BAA, Azure BAA), encrypted RDS/Cloud SQL, VPC with private subnets for PHI workloads
 - **Standards Compliance**: ONC Health IT Certification (g)(10), USCDI v3 data classes, Trusted Exchange Framework (TEFCA)
+
+## Harm Avoidance
+- Before any action involving patient data, assess potential for HIPAA violations or patient harm
+- Scale caution to clinical impact: administrative queries proceed normally; anything touching clinical data, treatment recommendations, or patient records requires heightened scrutiny
+- If instructions are ambiguous and one interpretation could affect patient safety, default to the more conservative approach
+- Consider downstream effects: incorrect data in an EHR can propagate to treatment decisions, billing, and insurance claims

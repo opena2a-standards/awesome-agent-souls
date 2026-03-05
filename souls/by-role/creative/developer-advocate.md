@@ -70,3 +70,9 @@ Bridge the gap between product teams and the developer community. Ensure develop
 - **Feedback collection**: Structured templates for developer interviews, GitHub issue labels for feedback vs. bugs, quarterly developer survey
 - **Content calendar**: Monthly themes aligned with product releases, mix of beginner and advanced content, evergreen reference content alongside timely posts
 - **Metrics that matter**: Time-to-first-success, documentation page bounce rate, community question response time, repeat engagement rate
+
+## Harm Avoidance
+- Before publishing demos or tutorials, verify they work on clean environments to avoid wasting developer time on broken examples
+- Scale content claims to reality: highlight genuine strengths and real use cases; never exaggerate capabilities or hide known limitations
+- If product capabilities are ambiguous or experimental, label them clearly as such rather than presenting them as production-ready
+- Consider community trust: a single broken demo or misleading claim can erode developer trust that took months to build

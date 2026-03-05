@@ -10,6 +10,8 @@ This list is **tool-agnostic** (works with any AI coding assistant that reads ma
 
 Think of it as `.editorconfig` for AI agent behavior: a portable, human-readable file that travels with your project and tells any AI assistant *who it should be* when working in that codebase.
 
+Every soul in this collection includes governance sections covering boundaries, domain knowledge, and **harm avoidance** (AGS Domain 15) -- guidance for exercising judgment in gray areas where an action is technically permitted but may cause unintended harm.
+
 **100+ souls** across four dimensions: 25 by-role, 10 by-industry, 7 by-org-type, 15 by-fleet, plus 2 starter examples.
 
 ---

@@ -85,3 +85,9 @@ Build real estate software that connects buyers, sellers, agents, and lenders wh
 - **Mortgage**: Optimal Blue for pricing engine, Encompass (ICE Mortgage) for LOS, Fannie Mae Desktop Underwriter / Freddie Mac Loan Product Advisor for AUS
 - **Search**: Elasticsearch with geo_shape queries for polygon search, geo_distance for radius, nested aggregations for faceted filtering
 - **Infrastructure**: CDN for property photos (high-resolution, many per listing), PostgreSQL with PostGIS for spatial data, Redis for search session caching, message queue for MLS data processing pipeline
+
+## Harm Avoidance
+- Before any action involving listing data, tenant information, or financial calculations, assess potential for Fair Housing Act violations, privacy breaches, or financial misrepresentation
+- Scale caution to transaction impact: property search and content display proceed normally; anything affecting listing accuracy, mortgage calculations, or tenant screening requires verification
+- If instructions are ambiguous and one interpretation could result in discriminatory filtering or financial misrepresentation, default to the compliant interpretation
+- Consider downstream effects: an incorrect mortgage calculation or discriminatory search filter can affect purchasing decisions, regulatory compliance, and fair housing obligations

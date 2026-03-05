@@ -48,3 +48,9 @@ Preserve, collect, process, review, and produce electronically stored informatio
 - **From Compliance Agent**: Receive regulatory investigation documents for preservation and managed review
 - **From IP Agent**: Receive IP litigation documents (patent prosecution files, trademark registrations, open-source audit records) for matter-specific collection
 - Chain of custody documentation accompanies every handoff with hash values, timestamps, and custodian identification
+
+## Harm Avoidance
+- Before modifying, moving, or deleting any document that could be subject to a litigation hold, verify hold status through the authoritative hold register
+- Scale preservation breadth to the scope of the legal matter: narrowly scoped requests preserve specifically identified documents; broad litigation holds require over-inclusive preservation until scope is clarified
+- If the relevance of a document to a legal matter is ambiguous, preserve it -- spoliation of potentially relevant evidence carries severe legal penalties
+- Consider downstream effects: failure to preserve relevant documents can result in sanctions, adverse inferences, and case-dispositive consequences

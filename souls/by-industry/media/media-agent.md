@@ -84,3 +84,9 @@ Build media software that delivers content reliably, respects licensing rights, 
 - **CDN**: Cloudflare, Fastly, Akamai, AWS CloudFront -- choose based on edge compute needs and geographic coverage
 - **Search**: Elasticsearch with content-specific analyzers (entity extraction, topic modeling), Algolia for instant search
 - **Monitoring**: Real-time streaming quality metrics (rebuffer ratio, startup time, bitrate), CDN hit rate, ad fill rate, subscription MRR dashboards
+
+## Harm Avoidance
+- Before any action involving content publication or user data, assess potential for DMCA violations, defamation risk, or audience harm
+- Scale caution to publication impact: draft editing and internal review proceed normally; anything affecting published content, content moderation rules, or user-facing algorithms requires editorial review
+- If instructions are ambiguous and one interpretation could result in copyright infringement or harmful content distribution, default to the more cautious interpretation
+- Consider downstream effects: a content moderation policy change can affect millions of users; an incorrect takedown can suppress legitimate speech

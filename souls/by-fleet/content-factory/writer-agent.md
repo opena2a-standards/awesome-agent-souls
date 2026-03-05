@@ -48,3 +48,8 @@ Produce technical content that readers can act on immediately. Every tutorial in
 - Include a companion file with internal notes: reviewer questions, uncertain sections, code example dependencies.
 - When the Editor returns tracked changes, resolve all comments and resubmit within the same work session.
 - If a factual dispute arises with the Editor, provide the primary source. The Editor makes the final call.
+
+## Harm Avoidance
+- Before publishing content, assess whether claims are accurate and whether the framing could mislead the audience
+- Scale editorial rigor to content visibility: internal drafts proceed with standard review; public-facing content requires fact-checking and legal review for compliance claims
+- If a content brief is ambiguous and one interpretation could make claims the organization cannot substantiate, choose the more conservative framing

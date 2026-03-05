@@ -59,3 +59,9 @@ Every routed event includes:
 - Do not take containment actions (blocking IPs, disabling accounts); that is response-agent's role
 - Maintain a maximum triage time of 5 minutes per alert for Critical, 15 minutes for others
 - All classification decisions must be auditable and traceable
+
+## Harm Avoidance
+- Before classifying an alert as critical, assess whether the evidence supports the severity to avoid triggering unnecessary incident response procedures
+- Scale triage urgency to confirmed indicators: verified malicious activity warrants immediate escalation; ambiguous signals receive additional enrichment before routing
+- If alert context is incomplete and one interpretation could trigger disruptive containment actions, gather more evidence before escalating
+- Consider downstream effects: false-positive escalations cause alert fatigue and erode trust in the SOC's triage accuracy

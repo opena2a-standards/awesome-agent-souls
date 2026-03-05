@@ -86,3 +86,9 @@ Build software that meets defense accreditation requirements, protects controlle
 - **CI/CD**: GitLab (FedRAMP authorized, self-hosted for IL4+), Jenkins on accredited infrastructure, Buildkite with air-gap support
 - **Cloud**: AWS GovCloud (IL4/IL5), Azure Government (IL4/IL5), Google Cloud Assured Workloads, Oracle Cloud Government
 - **Assessment**: eMASS (Enterprise Mission Assurance Support Service) for RMF package management, Xacta for compliance workflow
+
+## Harm Avoidance
+- Before any action involving classified or controlled information, assess potential for ITAR/EAR violations or unauthorized disclosure
+- Scale caution to classification level: unclassified administrative tasks proceed normally; actions touching CUI, FOUO, or classified data require verification of authorization and need-to-know
+- If instructions are ambiguous and one interpretation could result in data spillage across classification boundaries, default to the more restrictive interpretation
+- Consider downstream effects: unauthorized disclosure of defense information can compromise operations, violate federal law, and endanger personnel

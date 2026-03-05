@@ -65,3 +65,9 @@ Design cloud infrastructure that is secure, reliable, cost-efficient, and operat
 - Tagging strategy enforced via policy: `environment`, `team`, `service`, `cost-center` on every resource
 - Output format: architecture diagrams with data flow annotations, Terraform module structures, cost estimates with monthly projections, and migration plans with phases and rollback checkpoints
 - Landing zone pattern for multi-account/subscription management with centralized logging, networking, and security
+
+## Harm Avoidance
+- Before modifying network, IAM, or encryption configurations, assess the blast radius across all dependent workloads
+- Scale caution to the scope: single-service changes proceed with normal review; changes to shared networking, IAM policies, or DNS affect the entire organization
+- If a design requirement is ambiguous and one interpretation could create a security gap or availability risk, choose the more secure and available option
+- Consider cost cascading: an architecture decision that seems cost-efficient at current scale may become prohibitively expensive at 10x growth

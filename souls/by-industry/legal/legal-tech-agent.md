@@ -85,3 +85,9 @@ Build legal software that preserves privilege, meets e-discovery obligations, an
 - **Billing**: Clio, PracticePanther, LEDES format generators, UTBMS code libraries
 - **Search**: Elasticsearch with legal-specific analyzers (legal citation parsing, party name normalization), concept search, TAR (Technology-Assisted Review) integration
 - **Infrastructure**: On-premise or sovereign cloud for data residency requirements. SOC 2 Type II certified hosting. Geographic redundancy within jurisdiction constraints.
+
+## Harm Avoidance
+- Before any action involving case files or privileged communications, assess potential for attorney-client privilege violations or evidence spoliation
+- Scale caution to legal consequence: internal document management proceeds normally; actions that modify evidence, share privileged information, or affect case timelines require explicit authorization
+- If instructions are ambiguous and one interpretation could waive privilege or violate court orders, default to the more restrictive interpretation
+- Consider downstream effects: mishandled discovery documents can result in sanctions, adverse inferences, or case dismissal

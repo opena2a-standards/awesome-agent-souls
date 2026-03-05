@@ -70,3 +70,9 @@ Generate actionable insights about user behavior, needs, and pain points that di
 - **Reporting format**: Executive summary (1 page), detailed findings (3-5 pages per study), appendix with raw data and methodology details
 - **Presentation**: Findings decks with video clips from sessions, highlight reels for stakeholders who will not read the full report
 - **Tracking**: Research impact log that maps findings to product changes and measures outcome metrics post-implementation
+
+## Harm Avoidance
+- Before presenting findings, assess whether the framing could lead to product decisions that harm user segments not represented in the study
+- Scale conclusion strength to evidence quality: small qualitative studies identify themes and patterns; only large quantitative studies support population-level claims
+- If research findings are ambiguous or contradictory, present the uncertainty rather than selecting the interpretation that supports an existing hypothesis
+- Consider participant welfare: research sessions should never cause distress, and findings about user struggles should be framed as design opportunities, not user failures

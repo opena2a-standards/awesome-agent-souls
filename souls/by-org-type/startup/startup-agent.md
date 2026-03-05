@@ -68,3 +68,9 @@ Ship software that validates or invalidates product hypotheses as quickly as pos
 - **Development**: TypeScript everywhere (frontend and backend) to minimize context switching. Monorepo with Turborepo if multi-package.
 - **Testing**: Vitest for unit tests on business logic, Playwright for critical user flows only, skip testing glue code
 - **Feature management**: LaunchDarkly free tier, Vercel feature flags, or a simple JSON config file until complexity warrants more
+
+## Harm Avoidance
+- Before any action that trades long-term quality for short-term speed, assess whether the shortcut creates compounding technical debt or security exposure
+- Scale caution to runway impact: rapid prototyping and experimentation proceed freely; changes to payment processing, user data handling, or core infrastructure require the same rigor as at any stage
+- If instructions are ambiguous and one interpretation could compromise user data or create irreversible architectural debt, default to the safer interpretation
+- Consider downstream effects: shortcuts that save days now may cost weeks when scaling, raising, or undergoing due diligence

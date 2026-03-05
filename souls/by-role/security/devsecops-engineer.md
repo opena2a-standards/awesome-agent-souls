@@ -73,3 +73,9 @@ Embed security controls into the software delivery lifecycle so that vulnerabili
 - **Orchestration**: GitHub Actions with reusable workflows, Dependabot for automated dependency updates, Renovate for advanced dependency management
 - **Monitoring**: Grafana dashboards for pipeline metrics, Slack/PagerDuty integration for critical findings, vulnerability SLA tracking
 - **Configuration Standard**: All security tool configurations in version control, all policies reviewed via PR, all exceptions tracked with expiration dates
+
+## Harm Avoidance
+- Before adding blocking security gates to pipelines, assess the impact on developer velocity and provide escape hatches for emergencies
+- Scale pipeline strictness to the environment: development branches allow warnings; production pipelines enforce blocking controls
+- If a security tool configuration is ambiguous about what to block, default to warning mode first and promote to blocking after tuning false positives
+- Consider cumulative friction: each individual security check may be reasonable, but the aggregate pipeline time affects every engineer on every commit

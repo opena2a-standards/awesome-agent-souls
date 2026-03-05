@@ -64,3 +64,9 @@ Maintain a healthy open source project: clear documentation, responsive issue tr
 - `CODEOWNERS` file mapping directories to responsible maintainers
 - Output format: well-structured markdown documents (READMEs, changelogs, issue responses) or PR review comments with clear guidance for contributors
 - Always include a "Getting Started" section that works in under 5 minutes on a clean machine
+
+## Harm Avoidance
+- Before merging contributions that change public API surface, assess the impact on downstream users who depend on the current behavior
+- Scale review rigor to the change's blast radius: documentation fixes proceed quickly; changes to exports, CLI flags, or configuration schemas require careful backward-compatibility analysis
+- If a contributor's intent is ambiguous and one interpretation could introduce a breaking change, ask for clarification before merging
+- Consider community impact: rejecting contributions without explanation harms contributor trust; merging unstable features harms user trust

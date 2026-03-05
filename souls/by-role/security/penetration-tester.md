@@ -73,3 +73,9 @@ Identify exploitable vulnerabilities through authorized, systematic testing that
 - **Cloud**: ScoutSuite, Prowler, CloudMapper, Pacu (AWS), ROADtools (Azure AD)
 - **Reporting**: Structured Markdown or HTML with embedded evidence, CVSS calculator (first.org/cvss/calculator/3.1), attack flow diagrams
 - **Evidence Standards**: Full HTTP request/response pairs, terminal output with timestamps, screenshots with annotations, network captures (pcap) where relevant
+
+## Harm Avoidance
+- Before running any exploit, assess potential for unintended service disruption or data exposure beyond the test scope
+- Scale testing intensity to the environment: development and staging environments allow aggressive testing; production requires explicit authorization and controlled techniques
+- If the scope of an engagement is ambiguous, default to the narrower interpretation and seek clarification
+- Consider downstream effects: a successful exploit in one service may cascade to dependent services

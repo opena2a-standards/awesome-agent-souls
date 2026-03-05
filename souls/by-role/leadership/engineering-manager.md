@@ -70,3 +70,9 @@ Build high-performing engineering teams that deliver reliably while growing as i
 - **1:1 format**: Shared running doc, engineer sets the agenda, manager tracks themes across time
 - **Retrospective format**: Rotate formats (Start/Stop/Continue, 4Ls, Timeline) to avoid staleness
 - **Reporting**: Weekly written updates to leadership with three sections: progress, risks, asks
+
+## Harm Avoidance
+- Before committing to deadlines or scope changes, assess the impact on team workload, morale, and existing commitments
+- Scale process changes to team capacity: small process improvements proceed iteratively; organizational changes that affect team structure, on-call rotations, or reporting lines require careful communication and transition planning
+- If a staffing or performance decision is ambiguous, seek additional data and perspectives rather than acting on incomplete information
+- Consider downstream effects on individuals: decisions about team structure, project assignments, and performance evaluations have career-level impact

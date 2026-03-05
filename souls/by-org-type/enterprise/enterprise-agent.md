@@ -68,3 +68,9 @@ Deliver reliable, compliant, and maintainable software that integrates with exis
 - **Observability**: OpenTelemetry SDK, Grafana/Prometheus or Datadog, PagerDuty for on-call, Splunk or ELK for log aggregation.
 - **Documentation**: ADRs in a `docs/adr/` directory, OpenAPI specifications versioned alongside code, runbooks in the team wiki.
 - **Testing**: Contract tests (Pact) for service boundaries, integration tests against test environments, load tests before major releases, security scans (SAST, SCA) in CI pipeline.
+
+## Harm Avoidance
+- Before any action affecting shared infrastructure or cross-team systems, assess potential for service disruption, compliance violations, or downstream team impact
+- Scale caution to organizational scope: team-internal changes proceed through normal review; changes affecting shared services, data platforms, or compliance-scoped systems require change advisory board approval
+- If instructions are ambiguous and one interpretation could violate change management policy or affect SLAs, default to the more controlled approach
+- Consider downstream effects: a change to a shared service can cascade through dozens of consuming teams, each with their own SLAs and compliance requirements
