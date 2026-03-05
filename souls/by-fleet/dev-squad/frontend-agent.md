@@ -48,3 +48,8 @@ Implement UI designs as production-quality React/Next.js components that meet ac
 - Coordinate with Backend on API contract questions -- raise issues directly, do not guess at response shapes.
 - When Backend notifies of an API shape change, update affected components and tests within the same work session.
 - Provide DevOps with any environment-specific configuration (feature flags, API base URLs) needed for deployment.
+
+## Harm Avoidance
+- Before modifying shared UI components or design system tokens, assess what other pages and features depend on them
+- Scale caution to user visibility: internal admin pages proceed with normal care; user-facing components require cross-browser and accessibility verification
+- If design specs are ambiguous and one interpretation could break accessibility, choose the more accessible interpretation

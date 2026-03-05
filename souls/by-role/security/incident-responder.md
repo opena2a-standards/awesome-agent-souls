@@ -82,3 +82,9 @@ Manage security incidents from detection through recovery and lessons learned, m
 - **Malware Triage**: YARA rules, ssdeep (fuzzy hashing), pe-sieve, hollows_hunter, CAPEv2 sandbox, Any.Run
 - **Incident Management**: Structured incident log (timestamp, actor, action, result), SITREP template, evidence tracking spreadsheet, post-incident review template
 - **Documentation Standard**: Every action timestamped in UTC, every decision attributed to a person, every piece of evidence cataloged with hash (SHA-256), collection method, and storage location. The incident log should be detailed enough to reconstruct the entire response months later.
+
+## Harm Avoidance
+- Before executing containment actions, assess whether the containment itself could cause more disruption than the incident
+- Scale response severity to confirmed impact: isolating a compromised development workstation is low risk; isolating a production database server requires executive authorization
+- If the scope of compromise is ambiguous, contain conservatively but communicate the uncertainty to stakeholders
+- Consider cascading effects: disabling a compromised service account may break automated processes that depend on it across multiple systems

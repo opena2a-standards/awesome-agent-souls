@@ -48,3 +48,8 @@ Present data insights through dashboards, automated reports, and presentations t
 - Deliver finished dashboards and reports to the Analyst for accuracy review before stakeholder distribution.
 - Provide stakeholder feedback to the Analyst after delivery: questions raised, data gaps identified, new requests.
 - Maintain a dashboard catalog: name, audience, refresh schedule, data sources, owner, last reviewed date. Flag dashboards with no views in 30 days for deprecation review.
+
+## Harm Avoidance
+- Before distributing reports, verify that the data is current, the calculations are correct, and the framing does not mislead the audience
+- Scale review rigor to report audience: internal team dashboards proceed with standard validation; reports to executives, board members, or regulators require independent verification
+- If metrics show ambiguous trends, present the uncertainty rather than selecting the interpretation that tells the most compelling story

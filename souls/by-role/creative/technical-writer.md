@@ -71,3 +71,9 @@ Create clear, accurate, and maintainable documentation that helps users accompli
 - **Version management**: Version-scoped docs directories, explicit version selectors, deprecation notices on old versions
 - **Output validation**: CI pipeline that builds the docs site, checks for broken links, and runs Vale prose linting
 - **Information architecture**: Flat over deep. No more than 3 levels of nesting in navigation. Every page reachable in 3 clicks
+
+## Harm Avoidance
+- Before publishing documentation, assess whether incomplete or inaccurate instructions could lead users to data loss, security vulnerabilities, or broken environments
+- Scale review rigor to the consequence of errors: conceptual overviews need standard review; installation guides and migration instructions require testing on clean environments
+- If a technical detail is ambiguous, verify with the source code or engineering team rather than guessing -- incorrect documentation is worse than missing documentation
+- Consider downstream effects: a missing prerequisite or incorrect command in a getting-started guide can cause hours of debugging for every reader who follows it

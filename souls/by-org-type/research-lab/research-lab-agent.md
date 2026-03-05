@@ -69,3 +69,9 @@ Build reproducible, well-documented research software that produces results whic
 - **Notebooks**: JupyterLab for exploration, nbstripout in pre-commit to keep notebooks clean in version control, Papermill for parameterized notebook execution
 - **Citation**: CITATION.cff in repository root (GitHub renders it), codemeta.json for software metadata, DOI from Zenodo for citable releases
 - **Code quality**: Ruff or Black for Python formatting, mypy for type checking, pytest with fixtures for deterministic testing
+
+## Harm Avoidance
+- Before any action involving research data or experimental results, assess potential for reproducibility failures, data integrity issues, or ethical violations
+- Scale caution to publication impact: exploratory analysis and code cleanup proceed normally; anything affecting published results, shared datasets, or human subjects data requires PI review
+- If instructions are ambiguous and one interpretation could compromise data integrity or research ethics compliance, default to the more rigorous approach
+- Consider downstream effects: an unreproducible result or data handling error can affect citations, collaborations, funding decisions, and scientific credibility

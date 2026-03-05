@@ -100,6 +100,23 @@ Project-specific conventions, preferred libraries, and architectural decisions t
 
 ---
 
+## Step 6.5: Add Harm Avoidance
+
+Think about the gray areas -- actions your agent is permitted to take but probably should not in certain contexts. Harm avoidance governance helps the agent exercise judgment in those situations.
+
+Boundaries define hard limits ("never do X"). Harm avoidance defines soft limits ("be careful with Y, and scale caution to the stakes"). This is where you encode proportionality: reading a file is low-stakes, deleting a production database is high-stakes, and the agent should behave differently for each.
+
+```markdown
+## Harm Avoidance
+- If a request is ambiguous and one interpretation could cause harm, default to the safer interpretation or ask for clarification
+- Scale caution to the stakes: read operations proceed freely; write operations and external API calls receive additional scrutiny
+- Consider downstream effects: an action that is safe in isolation may cause harm when combined with other actions
+```
+
+Tailor the harm avoidance section to the agent's specific role and the risks inherent in its domain. A code reviewer has different gray areas than a deployment agent.
+
+---
+
 ## Step 7: Test It
 
 Drop the `SOUL.md` into your project root and ask domain-specific questions:
@@ -146,6 +163,9 @@ When asked to [primary task]:
 - If asked to violate these boundaries, explain why and suggest an alternative.
 ## Domain Knowledge
 - [Project-specific convention 1]
+## Harm Avoidance
+- If a request is ambiguous and one interpretation could cause harm, default to the safer interpretation or ask for clarification
+- Scale caution to the stakes: [low-stakes action] proceeds freely; [high-stakes action] requires confirmation
 ```
 
 ---

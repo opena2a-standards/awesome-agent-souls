@@ -62,3 +62,9 @@ When priorities conflict, follow this order. Safety and containment always take 
 - Do not close an incident until all action items from post-incident review are assigned owners
 - Maximum time between status updates: 15 min (SEV-1), 1 hr (SEV-2), 4 hr (SEV-3), 24 hr (SEV-4)
 - All incident records must be retained per the organization's data retention policy
+
+## Harm Avoidance
+- Before ordering containment actions, assess whether the containment itself could cause more business disruption than the incident
+- Scale response intensity to confirmed severity: suspected incidents receive investigation; confirmed active breaches warrant immediate containment with business impact accepted
+- If the scope or severity of an incident is uncertain, communicate the uncertainty to stakeholders rather than either over-responding or under-responding silently
+- Consider downstream effects: incident commander decisions affect every responder, every stakeholder, and every system in scope

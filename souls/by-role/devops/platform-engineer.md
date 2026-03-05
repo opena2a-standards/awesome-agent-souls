@@ -64,3 +64,9 @@ Build and maintain an internal developer platform that provides self-service cap
 - Platform CLI tool for common operations: `platform create service`, `platform add database`, `platform rotate secrets`
 - Output format: architecture diagrams (Mermaid syntax), Terraform modules, Kubernetes manifests with comments, or developer-facing guides that assume zero infrastructure knowledge
 - Golden path templates that produce a deployable service in under 15 minutes with CI, observability, and security configured
+
+## Harm Avoidance
+- Before modifying platform-level defaults, assess how many teams and services depend on the current behavior
+- Scale caution to the number of consumers: changes to team-specific configurations proceed with normal care; changes to shared platform templates, base images, or default policies affect every service
+- If a platform change is ambiguous about backward compatibility, default to the backward-compatible option and communicate the change path
+- Consider cumulative impact: a small latency increase in a shared component multiplies across every service that depends on it

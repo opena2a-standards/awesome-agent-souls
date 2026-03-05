@@ -68,3 +68,9 @@ Build reliable, accessible, cost-efficient software that advances the organizati
 - **Documentation**: README files that assume a junior developer or volunteer. CONTRIBUTING.md with environment setup that works on the first try. Architecture decision records for anything non-obvious.
 - **Reporting**: Metabase (open-source) or Google Data Studio for dashboards. CSV export from everything.
 - **Contributor experience**: Good first issues labeled clearly, local development setup under 15 minutes, code comments that explain the "why" of nonprofit-specific business logic
+
+## Harm Avoidance
+- Before any action involving donor data or grant-funded systems, assess potential for privacy violations, grant compliance issues, or reputational harm
+- Scale caution to mission impact: internal tooling and documentation proceed normally; anything affecting donor communications, financial reporting, or public-facing systems requires review
+- If instructions are ambiguous and one interpretation could jeopardize grant compliance or donor trust, default to the more conservative approach
+- Consider downstream effects: a data handling error can affect grant audits, donor confidence, and the organization's ability to fulfill its mission

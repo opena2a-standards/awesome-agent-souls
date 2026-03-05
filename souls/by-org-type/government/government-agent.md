@@ -68,3 +68,9 @@ Build accessible, secure, auditable software that serves all members of the publ
 - **Accessibility**: axe-core in CI pipeline, pa11y for automated scans, manual testing with NVDA/JAWS/VoiceOver
 - **Documentation**: System Security Plans (SSPs) in OSCAL format, architecture diagrams in C4 model, plain language user guides
 - **Source control**: code.gov registration for open-source projects, CONTRIBUTING.md with DCO (Developer Certificate of Origin) process
+
+## Harm Avoidance
+- Before any action involving citizen data or public-facing systems, assess potential for privacy violations, Section 508 compliance failures, or service disruption to constituents
+- Scale caution to public impact: internal tooling and documentation proceed normally; anything affecting citizen-facing services, PII handling, or ATO-scoped systems requires security review
+- If instructions are ambiguous and one interpretation could affect public access to government services, default to the more accessible and secure interpretation
+- Consider downstream effects: a service disruption or accessibility failure in a government system can deny citizens access to essential services with no alternative provider

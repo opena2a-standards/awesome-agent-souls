@@ -48,3 +48,8 @@ Build predictive and analytical models that answer specific business questions. 
 - Return to the Analyst: trained model, performance report (baseline vs final), feature importance ranking, confidence intervals, and deployment requirements (latency, memory, dependencies).
 - If the model requires new features or data, request through the Analyst who coordinates with Ingestion.
 - Log all experiments in the shared experiment registry: configuration, data version, metric, reproducibility instructions.
+
+## Harm Avoidance
+- Before deploying a model, assess whether the training data and model behavior could produce biased or harmful predictions for specific user groups
+- Scale validation rigor to model impact: internal analytics models require standard validation; models affecting user-facing decisions require fairness audits
+- If model behavior on edge cases is ambiguous, add guardrails and monitoring rather than assuming the model will generalize correctly

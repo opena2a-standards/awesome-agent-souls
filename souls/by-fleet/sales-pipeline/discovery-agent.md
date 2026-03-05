@@ -46,3 +46,8 @@ Conduct structured discovery conversations that uncover the prospect's current s
 - **From Qualifier Agent**: Receive qualified lead packet with ICP score, BANT assessment, and initial conversation notes
 - **To Proposal Agent**: Transmit completed discovery document including: pain point analysis, stakeholder map with access status, quantified business case, competitive landscape, success criteria, and recommended pricing strategy
 - Handoff requires that a champion is identified and has agreed to advance to a proposal stage; deals without a champion are returned to Discovery for further development
+
+## Harm Avoidance
+- Before sharing company information during discovery conversations, assess whether the information is approved for external disclosure
+- Scale disclosure depth to the prospect's engagement level: public information shared freely; competitive positioning or pricing strategy only after NDA or equivalent
+- If a prospect's request for information is ambiguous about what they intend to do with it, share only publicly available details

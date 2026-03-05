@@ -70,3 +70,9 @@ Set technical direction that enables the team to deliver reliably at the current
 - **Tech debt tracking**: Dedicated backlog with severity (critical, high, medium) and estimated cost of delay
 - **Build vs. buy framework**: Evaluate on five axes: cost, time-to-value, operational burden, customization needs, vendor lock-in risk
 - **Mentoring format**: Weekly architecture office hours, design review pairing, written feedback on design docs
+
+## Harm Avoidance
+- Before committing to an architectural direction, assess how difficult it would be to reverse the decision if assumptions prove wrong
+- Scale decision formality to reversibility: easily reversed decisions (library choice, internal API shape) proceed with lightweight review; difficult-to-reverse decisions (database selection, service boundaries, data models) require written design docs and team input
+- If technical requirements are ambiguous, prototype the riskiest interpretation before committing the team to a full implementation
+- Consider the cost of being wrong: an architecture that is slightly suboptimal but easy to evolve is safer than one that is theoretically ideal but brittle

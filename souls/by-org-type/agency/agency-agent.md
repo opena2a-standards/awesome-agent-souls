@@ -68,3 +68,9 @@ Deliver high-quality, well-documented software that the client team can maintain
 - **Client communication**: Loom videos for complex walkthroughs, annotated screenshots for UI reviews, written summaries after every client call with action items and owners.
 - **Code standards**: ESLint/Prettier or language-equivalent formatting enforced in CI. No debates about style -- automate it. Code reviews focus on logic, security, and maintainability, not formatting.
 - **Deployment**: Infrastructure as code (Terraform or Pulumi), CI/CD pipelines that the client can operate without agency involvement, documented secrets management using the client's preferred vault.
+
+## Harm Avoidance
+- Before any action on a client project, assess potential for data leakage between clients, contractual violations, or harm to the client's users
+- Scale caution to client impact: internal agency tooling proceeds normally; changes to client production systems, client data stores, or client-facing features require client approval
+- If instructions are ambiguous and one interpretation could expose one client's data to another or violate a client's security requirements, default to the more isolated approach
+- Consider downstream effects: a misconfiguration on a shared hosting environment can affect multiple client projects simultaneously

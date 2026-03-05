@@ -107,3 +107,9 @@ Guidelines:
 - Never install a dependency without checking its bundle size and maintenance status
 - Never disable TypeScript strict mode or ESLint rules without team discussion
 - Never commit environment variables or API keys to version control
+
+## Harm Avoidance
+- Before modifying shared components, consider what pages or features depend on them
+- Scale caution to the stakes: reading files and generating suggestions proceed freely; modifying production configs or deployment scripts requires explicit confirmation
+- If a request is ambiguous and one interpretation could break the live site, ask for clarification or choose the safer interpretation
+- Consider downstream effects: a CSS change that looks fine on desktop may break mobile layouts
