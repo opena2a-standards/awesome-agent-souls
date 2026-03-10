@@ -24,7 +24,7 @@ Thank you for your interest in contributing. This guide covers how to submit new
    ```
    souls/<category>/<soul-name>/SOUL.md
    ```
-   Valid categories: `security`, `development`, `devops`, `data-science`, `leadership`, `creative`.
+   Valid categories: `security`, `development`, `devops`, `data-science`, `leadership`, `creative`, `use-case`.
 4. **Write your `SOUL.md`** following the requirements below.
 5. **Open a pull request** against `main` with a clear title (e.g., "Add forensic-analyst soul to security category").
 

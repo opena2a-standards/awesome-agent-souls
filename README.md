@@ -1,6 +1,6 @@
 # Awesome Agent Souls
 
-**A curated collection of SOUL.md identity files for AI agents -- organized by role, industry, organization type, and fleet.**
+**A curated collection of SOUL.md identity files for AI agents -- organized by role, industry, organization type, use case, and fleet.**
 
 ---
 
@@ -12,7 +12,7 @@ Think of it as `.editorconfig` for AI agent behavior: a portable, human-readable
 
 Every soul in this collection includes governance sections covering boundaries, domain knowledge, and **harm avoidance** (AGS Domain 15) -- guidance for exercising judgment in gray areas where an action is technically permitted but may cause unintended harm.
 
-**100+ souls** across four dimensions: 25 by-role, 10 by-industry, 7 by-org-type, 15 by-fleet, plus 2 starter examples.
+**100+ souls** across five dimensions: 25 by-role, 10 by-industry, 7 by-org-type, 6 by-use-case, 15 by-fleet, plus 2 starter examples.
 
 ---
 
@@ -40,6 +40,7 @@ AI coding tools read project-level instruction files from the repository root at
 | Cursor | `.cursorrules` | Rename to `.cursorrules`, or reference SOUL.md from `.cursorrules` |
 | Windsurf | `.windsurfrules` | Rename to `.windsurfrules`, or reference SOUL.md |
 | GitHub Copilot | `.github/copilot-instructions.md` | Copy to `.github/copilot-instructions.md` |
+| OpenClaw | `SOUL.md` | Natively reads `SOUL.md` from `~/.openclaw/workspaces/<name>/SOUL.md` -- copy directly |
 | Aider | `.aider.conf.yml` | Reference via `read:` directive |
 | Any tool | Varies | Most tools that read markdown from project root will pick up `SOUL.md` directly |
 
@@ -89,7 +90,7 @@ monorepo/
 
 - [Where SOUL.md Lives](#where-soulmd-lives)
 - [Quick Start](#quick-start)
-- [The Four-Dimensional Taxonomy](#the-four-dimensional-taxonomy)
+- [The Five-Dimensional Taxonomy](#the-five-dimensional-taxonomy)
 - [Combining Souls](#combining-souls)
 - [By Role (25 souls)](#by-role-25-souls)
   - [Security](#security)
@@ -100,6 +101,7 @@ monorepo/
   - [Creative](#creative)
 - [By Industry (10 souls)](#by-industry-10-souls)
 - [By Organization Type (7 souls)](#by-organization-type-7-souls)
+- [By Use Case (6 souls)](#by-use-case-6-souls)
 - [By Fleet (15 teams)](#by-fleet-15-teams)
 - [Starter Examples (2 templates)](#starter-examples-2-templates)
 - [Guides](#guides)
@@ -160,19 +162,30 @@ npx opena2a-cli guard sign SOUL.md
 npx opena2a-cli guard verify
 ```
 
+**Using OpenClaw?** Copy a soul directly into your agent workspace:
+
+```bash
+# Copy a personal assistant soul into your OpenClaw agent
+cp souls/by-use-case/personal-assistant.md ~/.openclaw/workspaces/default/SOUL.md
+
+# Or a customer support agent
+cp souls/by-use-case/customer-support.md ~/.openclaw/workspaces/support-bot/SOUL.md
+```
+
 See [Where SOUL.md Lives](#where-soulmd-lives) above for tool-specific placement and discovery details.
 
 ---
 
-## The Four-Dimensional Taxonomy
+## The Five-Dimensional Taxonomy
 
-Agent souls in this collection are organized along four independent dimensions:
+Agent souls in this collection are organized along five independent dimensions:
 
 | Dimension | Question it answers | Count | Example |
 |-----------|-------------------|-------|---------|
 | **By Role** | What do you do? | 25 | Penetration tester, ML engineer, SRE |
 | **By Industry** | Where do you work? | 10 | Healthcare (HIPAA), Fintech (PCI-DSS), Defense (ITAR) |
 | **By Org Type** | How does your organization operate? | 7 | Startup (speed), Enterprise (compliance), Government (FedRAMP) |
+| **By Use Case** | What task do you handle? | 6 | Personal assistant, inbox triage, content creation |
 | **By Fleet** | What team do you need? | 15 | Red Team Ops, Dev Squad, HR Operations |
 
 Each dimension is independent. A soul from one dimension can be combined with souls from any other dimension to create a highly specific agent identity tailored to your exact context. Fleets add a coordination layer -- instead of a single agent, you deploy a team of agents that work together with defined handoff rules and shared governance.
@@ -345,6 +358,29 @@ Organization-type souls define *how the organization operates* -- its decision-m
 
 ---
 
+## By Use Case (6 souls)
+
+Use-case souls define *what task the agent handles* -- common workflows that span across roles and industries. These are designed for any autonomous agent runtime that uses SOUL.md for identity -- including [OpenClaw](https://github.com/openclaw/openclaw), custom agent frameworks, messaging-platform bots, and scheduled automation agents.
+
+| Soul | Focus | Popular Platforms |
+|------|-------|-------------------|
+| [personal-assistant](souls/by-use-case/personal-assistant.md) | Daily digest, calendar, reminders, note management across Obsidian/Notion/Apple Notes | WhatsApp, Telegram, Slack |
+| [inbox-manager](souls/by-use-case/inbox-manager.md) | Email and message triage, priority filtering, draft responses | Gmail, Slack, Discord |
+| [content-creator](souls/by-use-case/content-creator.md) | Social media writing, blog posts, SEO optimization, brand voice | LinkedIn, X/Twitter, Reddit |
+| [customer-support](souls/by-use-case/customer-support.md) | Ticket handling, SLA management, escalation workflows | Intercom, Zendesk, Slack |
+| [meeting-assistant](souls/by-use-case/meeting-assistant.md) | Meeting summaries, action item extraction, follow-up tracking | Google Meet, Zoom, Teams |
+| [devops-chatops](souls/by-use-case/devops-chatops.md) | Server monitoring, diagnostics, and operational commands via chat | Telegram, Slack, Discord |
+
+These souls can be combined with other dimensions. For example, a fintech customer support agent:
+
+```bash
+cp souls/by-use-case/customer-support.md ./SOUL.md
+echo "" >> ./SOUL.md
+cat souls/by-industry/fintech/fintech-agent.md >> ./SOUL.md
+```
+
+---
+
 ## By Fleet (15 teams)
 
 Fleet souls define *coordinated teams* of AI agents that work together. Each fleet contains individual agent soul files plus a shared `FLEET.md` that defines the coordination protocol, handoff rules, and shared governance. Unlike individual souls, fleets model how agents collaborate -- who hands off to whom, what artifacts are shared, and how decisions are escalated.
@@ -494,13 +530,14 @@ For a detailed comparison, see [Soul vs Skills guide](guides/soul-vs-skills.md).
 
 ## Contributing
 
-We welcome contributions across all four dimensions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting new souls, quality requirements, and the review process.
+We welcome contributions across all five dimensions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting new souls, quality requirements, and the review process.
 
 Areas where contributions are particularly valuable:
 
 - **By Industry:** Souls for industries not yet covered (insurance, agriculture, transportation, telecom)
 - **By Org Type:** Souls for organization types not yet covered (franchise, cooperative, academic department)
 - **By Role:** Souls for specialized roles (database administrator, QA engineer, technical product manager)
+- **By Use Case:** Souls for common agent workflows (voice journaling, brand monitoring, lead qualification, report generator)
 - **By Fleet:** Teams for workflows not yet covered (marketing operations, product launch, security compliance)
 - **Starter Examples:** Templates for common project types (mobile app, CLI tool, microservice, data pipeline)
 
