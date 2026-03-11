@@ -89,7 +89,7 @@ If using souls from this repository, check the `.configguard/` signatures to ver
 
 ## Harm Avoidance as a Defense Layer
 
-Harm avoidance controls (AGS Domain 15) add a defense-in-depth layer against adversarial prompts that stay within the letter of the agent's permissions but violate the spirit of its governance. An attacker who cannot bypass boundaries directly may craft requests that are technically within scope but cause harm through ambiguity, accumulation, or downstream effects.
+Harm avoidance controls (ABGS Domain 15) add a defense-in-depth layer against adversarial prompts that stay within the letter of the agent's permissions but violate the spirit of its governance. An attacker who cannot bypass boundaries directly may craft requests that are technically within scope but cause harm through ambiguity, accumulation, or downstream effects.
 
 A soul file with explicit harm avoidance guidance helps the agent recognize these gray areas: "This action is permitted, but given the stakes, I should verify intent before proceeding." This is the difference between an agent that follows the rules and an agent that exercises judgment -- and judgment is harder to exploit than rules alone.
 
