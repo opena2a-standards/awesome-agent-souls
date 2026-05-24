@@ -1,5 +1,7 @@
 # Awesome Agent Souls
 
+[![Status: stable](https://img.shields.io/badge/status-stable-green)](./STATUS.md)
+
 **A curated collection of SOUL.md identity files for AI agents -- organized by role, industry, organization type, use case, and fleet.**
 
 ---
