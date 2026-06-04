@@ -12,7 +12,7 @@ This list is **tool-agnostic** (works with any AI coding assistant that reads ma
 
 Think of it as `.editorconfig` for AI agent behavior: a portable, human-readable file that travels with your project and tells any AI assistant *who it should be* when working in that codebase.
 
-Every soul in this collection includes governance sections covering boundaries, domain knowledge, and **harm avoidance** (ABGS Domain 15) -- guidance for exercising judgment in gray areas where an action is technically permitted but may cause unintended harm.
+Every soul in this collection includes governance sections covering boundaries, domain knowledge, and **harm avoidance** (Domain 15 of the [Agent Behavioral Governance Specification](https://github.com/opena2a-org/agent-governance-spec), ABGS) -- guidance for exercising judgment in gray areas where an action is technically permitted but may cause unintended harm.
 
 **100+ souls** across five dimensions: 25 by-role, 10 by-industry, 7 by-org-type, 6 by-use-case, 15 by-fleet, plus 2 starter examples.
 
@@ -240,7 +240,7 @@ Fleets can be combined with industry context to create domain-aware coordinated 
 cp -r souls/by-fleet/red-team-ops/ ./fleet/
 
 # Layer fintech context into each agent's soul
-for soul in ./fleet/*-SOUL.md; do
+for soul in ./fleet/*-agent.md; do
   echo "" >> "$soul"
   cat souls/by-industry/fintech/fintech-agent.md >> "$soul"
 done
