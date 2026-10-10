@@ -529,6 +529,9 @@ describe('readRules and readSections', () => {
 
 describe('command line', () => {
   const script = join(repoRoot, 'scripts', 'check-souls.mjs');
+  // A working directory beside the temporary roots. The summary names a root inside the working
+  // directory by its relative path, so a test that expects a temporary root's absolute path runs
+  // from here: the temporary directory can be inside the repository.
   const elsewhere = mkdtempSync(join(tmpdir(), 'check-souls-cwd-'));
   after(() => rmSync(elsewhere, { recursive: true, force: true }));
 
@@ -578,7 +581,7 @@ describe('command line', () => {
         join(broken, soul),
         GOOD_USE_CASE.replace('name: helper\n', '').replace('## Harm Avoidance\n', ''),
       );
-      const { status, stdout } = run(['--root', broken]);
+      const { status, stdout } = run(['--root', broken], elsewhere);
       assert.equal(status, 1);
       assert.deepEqual(stdout.split('\n'), [
         'souls/by-use-case/helper.md: missing frontmatter field `name`',
@@ -600,7 +603,7 @@ describe('command line', () => {
       writeFileSync(join(single, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
       writeFileSync(join(single, 'README.md'), '[helper](souls/by-use-case/helper.md)\n');
       writeFileSync(join(single, soul), GOOD_USE_CASE.replace('## Harm Avoidance\n', ''));
-      const { status, stdout } = run(['--root', single]);
+      const { status, stdout } = run(['--root', single], elsewhere);
       assert.equal(status, 1);
       assert.deepEqual(stdout.split('\n'), [
         'souls/by-use-case/helper.md: missing section ## Harm Avoidance',
@@ -613,17 +616,28 @@ describe('command line', () => {
   });
 
   test('reports a directory without CONTRIBUTING.md and exits 1', () => {
-    const { status, stdout } = run(['--root', elsewhere]);
-    assert.equal(status, 1);
-    assert.deepEqual(stdout.split('\n'), [
-      'CONTRIBUTING.md: file not found',
-      `Checked 0 files in ${elsewhere} against 0 rules from CONTRIBUTING.md: 1 problem.`,
-      '',
-    ]);
+    const empty = mkdtempSync(join(tmpdir(), 'check-souls-empty-'));
+    try {
+      const { status, stdout } = run(['--root', empty], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'CONTRIBUTING.md: file not found',
+        `Checked 0 files in ${empty} against 0 rules from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
   });
 
   test('names the root relative to the working directory when it is inside it', () => {
     assert.match(run([]).stdout, / files in \. against /);
+  });
+
+  test('names a root below the working directory by its relative path', () => {
+    mkdirSync(join(elsewhere, 'nested', 'root'), { recursive: true });
+    const { stdout } = run(['--root', 'nested/root'], elsewhere);
+    assert.ok(stdout.includes(' files in nested/root against '), stdout);
   });
 
   test('names the root by its absolute path when run from outside it', () => {
