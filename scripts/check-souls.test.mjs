@@ -26,7 +26,7 @@ import { dirname, join, resolve } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { checkRepository, readRules, readSections } from './check-souls.mjs';
+import { checkRepository, main, readRules, readSections } from './check-souls.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -888,6 +888,20 @@ describe('command line', () => {
     assert.equal(stderr.split('\n')[0], `Unknown argument: ${shown}`);
   });
 
+  // The test above tells the Windows way of printing a path apart from the others only on Windows. These
+  // run main with each path separator, so both ways are checked on every platform.
+  for (const [separator, shown] of [
+    ['\\', 'C:\\repo\\a\\u{202e}b'],
+    ['/', 'C:\\\\repo\\\\a\\u{202e}b'],
+  ]) {
+    test(`prints an unknown argument as a path when the path separator is ${separator}`, (t) => {
+      const error = t.mock.method(console, 'error', () => {});
+      assert.equal(main(['C:\\repo\\a\u{202e}b'], { separator }), 2);
+      assert.equal(error.mock.callCount(), 1);
+      assert.equal(error.mock.calls[0].arguments[0].split('\n')[0], `Unknown argument: ${shown}`);
+    });
+  }
+
   for (const args of [['--root'], ['--root', '--help'], ['--root', '-h']]) {
     test(`${args.join(' ')} reports the missing directory and exits 2`, () => {
       const { status, stdout, stderr } = run(args);
@@ -1327,7 +1341,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 
   test('checks a long line of option words that contain npx in linear time', () => {
     // Returns the time taken to check a line of the given number of option words. Checking each npx
-    // against the whole rest of its line took about 0.8 seconds for 8,000 words.
+    // against the whole rest of its line took about 0.46 seconds for 8,000 words, a 40 KB line, with
+    // Node.js v26.7.0 on an Apple M4 Max.
     const check = (words) => {
       const line = `npx ${'-npx '.repeat(words)}`;
       const start = performance.now();
@@ -1529,6 +1544,20 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       'a.md:4: npx --yes opena2a-cli@latest guard sign SOUL.md',
       'a.md:5: Sign it with `guard sign`.',
       'a.md:6: git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign SOUL.md',
+    ]);
+  });
+
+  test('checks each guard sign on a line, whichever comes first', () => {
+    const text = [
+      'guard sign --files a.md then guard sign b.md',
+      'guard sign b.md then guard sign --files a.md',
+      'guard sign --files a.md then guard\u{a0}sign --files b.md',
+      'guard sign --files a.md then guard sign --files b.md',
+    ].join('\n');
+    assert.deepEqual(unnamedGuardSigns('a.md', text), [
+      'a.md:1: guard sign --files a.md then guard sign b.md',
+      'a.md:2: guard sign b.md then guard sign --files a.md',
+      'a.md:3: guard sign --files a.md then guard\u{a0}sign --files b.md',
     ]);
   });
 
