@@ -395,13 +395,15 @@ function count(n, noun) {
 
 const ESCAPES = { '\t': '\\t', '\n': '\\n', '\r': '\\r' };
 
-// Writes each control character as a visible escape such as \n or \x1b, so that a file name cannot
-// start an output line of its own or change how the terminal shows the output.
+// Writes each control character, format character (such as a right-to-left override or a zero width
+// space) and line or paragraph separator as a visible escape such as \n, \x1b or \u{202e}, so that a
+// file name cannot start an output line of its own or change how the terminal shows the output.
 function printable(text) {
-  return text.replace(
-    /[\x00-\x1f\x7f-\x9f]/g,
-    (char) => ESCAPES[char] ?? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`,
-  );
+  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (char) => {
+    if (ESCAPES[char]) return ESCAPES[char];
+    const code = char.codePointAt(0).toString(16);
+    return code.length <= 2 ? `\\x${code.padStart(2, '0')}` : `\\u{${code}}`;
+  });
 }
 
 // The working directory, or null when it has been removed.

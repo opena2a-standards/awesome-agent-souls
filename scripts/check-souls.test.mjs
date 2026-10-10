@@ -1027,6 +1027,29 @@ describe('command line', () => {
     },
   );
 
+  test('prints format characters and line or paragraph separators in a file name as escapes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-format-'));
+    try {
+      mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+      writeFileSync(join(root, 'README.md'), '');
+      // A right-to-left override, zero width space, soft hyphen, line and paragraph separators and a
+      // tag character outside the Basic Multilingual Plane.
+      const name = 'a‮b​c­d e f\u{e0041}g.md';
+      writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
+      const { status, stdout } = run(['--root', root], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/a\\u{202e}b\\u{200b}c\\xadd\\u{2028}e\\u{2029}f\\u{e0041}g.md: ' +
+          'missing YAML frontmatter between two --- lines at the top of the file',
+        `Checked 1 file in ${root} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test(
     'names the root by its absolute path when the working directory has been removed',
     { skip: process.platform === 'win32' ? 'Windows does not remove a directory that is in use' : false },
