@@ -10,7 +10,7 @@
 // It also checks README.md: every soul is linked, and every template has a
 // table row whose last cell lists the template's `##` sections in file order.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -118,37 +118,76 @@ function hasSection(headings, name) {
   return headings.some((heading) => heading === name || heading.startsWith(`${name} `));
 }
 
-function listMarkdownFiles(root, dir) {
-  const absolute = join(root, dir);
-  if (!existsSync(absolute)) return [];
+const REASONS = {
+  EACCES: 'permission denied',
+  EPERM: 'operation not permitted',
+  EISDIR: 'is a directory',
+  ENOTDIR: 'not a directory',
+  ELOOP: 'too many levels of symbolic links',
+  ENAMETOOLONG: 'name too long',
+};
+
+// Turns a file system error into a problem line that names the path `name`. An error without an
+// operating-system error number, such as an argument of the wrong type, is thrown again.
+function cannotRead(name, error) {
+  if (typeof error?.errno !== 'number') throw error;
+  const reason = REASONS[error.code];
+  return `${name}: cannot read${reason ? `: ${reason}` : ''} (${error.code})`;
+}
+
+// Whether a file at `pattern` could be inside the directory `dir`.
+function couldContain(dir, pattern) {
+  const dirParts = dir.split('/');
+  const patternParts = pattern.split('/');
+  return (
+    dirParts.length < patternParts.length &&
+    dirParts.every((part, index) => patternToMatcher(patternParts[index])(part) !== null)
+  );
+}
+
+// Lists the .md files under `dir`. A directory that cannot be read adds a problem and is added to
+// `unreadable`.
+function listMarkdownFiles(root, dir, problems, unreadable) {
+  let entries;
+  try {
+    entries = readdirSync(join(root, dir), { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    problems.push(cannotRead(dir, error));
+    unreadable.push(dir);
+    return [];
+  }
   const files = [];
-  for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+  for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     const path = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) files.push(...listMarkdownFiles(root, path));
+    if (entry.isDirectory()) files.push(...listMarkdownFiles(root, path, problems, unreadable));
     else if (entry.isFile() && entry.name.endsWith('.md')) files.push(path);
   }
   return files.sort();
 }
 
-// `name` is how a problem with the root itself names it, for example as typed after --root.
+// `name` is how a problem with the root itself names it, for example as the summary line names it.
 export function checkRepository(root, name = root) {
   const problems = [];
   let stats;
   try {
     stats = statSync(root, { throwIfNoEntry: false });
   } catch (error) {
-    return { problems: [`${name}: cannot read (${error.code})`], fileCount: 0, ruleCount: 0 };
+    return { problems: [cannotRead(name, error)], fileCount: 0, ruleCount: 0 };
   }
   if (!stats?.isDirectory()) {
     const problem = stats ? 'not a directory' : 'directory not found';
     return { problems: [`${name}: ${problem}`], fileCount: 0, ruleCount: 0 };
   }
-  const guidePath = join(root, GUIDE);
-  if (!existsSync(guidePath)) {
-    return { problems: [`${GUIDE}: file not found`], fileCount: 0, ruleCount: 0 };
+  let guide;
+  try {
+    guide = readFileSync(join(root, GUIDE), 'utf8');
+  } catch (error) {
+    const problem = error.code === 'ENOENT' ? `${GUIDE}: file not found` : cannotRead(GUIDE, error);
+    return { problems: [problem], fileCount: 0, ruleCount: 0 };
   }
-  const rules = readRules(readFileSync(guidePath, 'utf8'));
+  const rules = readRules(guide);
   if (!rules || rules.length === 0) {
     return {
       problems: [`${GUIDE}: requirements table not found (header: | ${HEADER.join(' | ')} |)`],
@@ -160,9 +199,18 @@ export function checkRepository(root, name = root) {
     if (!rule.pattern) problems.push(`${GUIDE}: table row ${index + 1} (${rule.dimension}) has no location`);
   });
 
-  const readmePath = join(root, README);
-  const readme = existsSync(readmePath) ? readFileSync(readmePath, 'utf8') : '';
-  const files = SCANNED_DIRS.flatMap((dir) => listMarkdownFiles(root, dir));
+  // A README.md that cannot be read is reported once, and its links and rows are not checked.
+  let readme = '';
+  try {
+    readme = readFileSync(join(root, README), 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      problems.push(cannotRead(README, error));
+      readme = null;
+    }
+  }
+  const unreadable = [];
+  const files = SCANNED_DIRS.flatMap((dir) => listMarkdownFiles(root, dir, problems, unreadable));
   const matchedRules = new Set();
 
   for (const file of files) {
@@ -181,7 +229,14 @@ export function checkRepository(root, name = root) {
     }
     matchedRules.add(rule);
 
-    const frontmatter = readFrontmatter(readFileSync(join(root, file), 'utf8'));
+    let text;
+    try {
+      text = readFileSync(join(root, file), 'utf8');
+    } catch (error) {
+      problems.push(cannotRead(file, error));
+      continue;
+    }
+    const frontmatter = readFrontmatter(text);
     if (!frontmatter) {
       problems.push(`${file}: missing YAML frontmatter between two --- lines at the top of the file`);
       continue;
@@ -206,6 +261,8 @@ export function checkRepository(root, name = root) {
         problems.push(`${file}: missing section ${wanted}`);
       }
     }
+
+    if (readme === null) continue;
 
     if (file.startsWith(`${LINKED_DIR}/`)) {
       const directory = `${file.slice(0, file.lastIndexOf('/'))}/`;
@@ -235,8 +292,9 @@ export function checkRepository(root, name = root) {
     }
   }
 
+  // A file at a rule's location may be in a directory that could not be read.
   for (const rule of rules) {
-    if (rule.pattern && !matchedRules.has(rule)) {
+    if (rule.pattern && !matchedRules.has(rule) && !unreadable.some((dir) => couldContain(dir, rule.pattern))) {
       problems.push(`${GUIDE}: no file matches \`${rule.pattern}\` (${rule.dimension})`);
     }
   }
