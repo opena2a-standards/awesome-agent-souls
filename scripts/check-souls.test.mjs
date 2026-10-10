@@ -54,10 +54,11 @@ const CMD_ESCAPED = /["%]/;
 
 // Returns a word as cmd.exe passes it to the program as one argument. The program reads backslashes
 // literally except before a double quote, where each pair is one backslash, so backslashes before a
-// quote or the closing quote are doubled and a quote in the word is written \".
+// quote or the closing quote are doubled and a quote in the word is written \". Each match starts at the
+// first backslash of a run, so a long run is read once instead of once from each of its backslashes.
 function windowsWord(word) {
   if (word && !CMD_QUOTED.test(word) && !CMD_ESCAPED.test(word)) return word;
-  const quoted = `"${word.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, '$1$1')}"`;
+  const quoted = `"${word.replace(/(?<!\\)(\\*)"/g, '$1$1\\"').replace(/(?<!\\)(\\*)$/, '$1$1')}"`;
   return CMD_ESCAPED.test(word) ? quoted.replace(/[ \t"%&|<>^(),;=]/g, '^$&') : quoted;
 }
 
@@ -312,6 +313,25 @@ describe('scannerCommand and scannerSpawn', () => {
     assert.equal(line('C:\\a"b c\\x'), 'node ^"C:\\a\\^"b^ c\\x^"');
     assert.equal(line('a\\"b'), 'node ^"a\\\\\\^"b^"');
     assert.equal(line('C:\\100%\\%TEMP% & x'), 'node ^"C:\\100^%\\^%TEMP^%^ ^&^ x^"');
+  });
+
+  test('on Windows quotes or escapes a word with a cmd.exe special character and no space', () => {
+    const line = (word) => scannerSpawn(['node', word], 'win32')[0];
+    assert.equal(line('C:\\R&D'), 'node "C:\\R&D"');
+    assert.equal(line('a%b\tc'), 'node ^"a^%b^\tc^"');
+    for (const special of '&|<>^(),;=') {
+      assert.equal(line(`a${special}b`), `node "a${special}b"`);
+      assert.equal(line(`a%b${special}c`), `node ^"a^%b^${special}c^"`);
+    }
+  });
+
+  test('on Windows builds the line for a word with a long run of backslashes in linear time', () => {
+    const run = '\\'.repeat(100_000);
+    const start = performance.now();
+    const built = scannerSpawn(['node', ` ${run}x`, `a ${run}`, `${run}"x`], 'win32')[0];
+    const elapsed = performance.now() - start;
+    assert.equal(built, `node " ${run}x" "a ${run}${run}" ^"${run}${run}\\^"x^"`);
+    assert.ok(elapsed < 1000, `built in ${Math.round(elapsed)} ms`);
   });
 });
 
@@ -861,19 +881,55 @@ describe('command line', () => {
   });
 });
 
-describe('README.md', () => {
-  // npx runs a hackmyagent that is already installed, even an older release, unless the command
-  // asks for @latest, and without --yes it stops to ask before installing.
-  test('runs the published hackmyagent release in every npx hackmyagent command', () => {
-    const lines = readFileSync(join(repoRoot, 'README.md'), 'utf8').split('\n');
-    const commands = lines
-      .map((line, index) => [index + 1, line])
-      .filter(([, line]) => /\bnpx\b.*\bhackmyagent\b/.test(line));
-    assert.ok(commands.length > 0, 'README.md: no npx hackmyagent command found');
-    const unpinned = commands
-      .filter(([, line]) => !/\bnpx --yes hackmyagent@latest\s/.test(line))
-      .map(([number, line]) => `README.md:${number}: ${line.trim()}`);
-    assert.deepEqual(unpinned, []);
+// npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
+// command asks for @latest, and without --yes it stops to ask before installing.
+const NPX_PACKAGE = /\b(?:hackmyagent|opena2a-cli)\b/;
+const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?![\w.-])/;
+
+// Returns `<file>:<line>: <text>` for each line of a markdown file with an npx command that runs
+// hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked.
+function unpinnedNpxCommands(file, text) {
+  return text.split('\n').flatMap((line, index) => {
+    const commands = line.split(/\bnpx\b/).slice(1);
+    const unpinned = commands.some((command) => NPX_PACKAGE.test(command) && !NPX_PINNED.test(command));
+    return unpinned ? [`${file}:${index + 1}: ${line.trim()}`] : [];
+  });
+}
+
+describe('npx commands in README.md and the guides', () => {
+  test('a command is pinned when it ends at a backtick or at the end of its line', () => {
+    const text = [
+      'Run it as `npx --yes hackmyagent@latest`.',
+      'npx --yes hackmyagent@latest',
+      'npx --yes opena2a-cli@latest guard verify',
+      '`--yes` lets npx install it without asking.',
+      'npx hackmyagent secure .',
+      'npx --yes hackmyagent@0.30.0 secure .',
+      'npx --yes hackmyagent@latest-beta secure .',
+      'npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
+      'git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
+    ].join('\n');
+    assert.deepEqual(unpinnedNpxCommands('a.md', text), [
+      'a.md:5: npx hackmyagent secure .',
+      'a.md:6: npx --yes hackmyagent@0.30.0 secure .',
+      'a.md:7: npx --yes hackmyagent@latest-beta secure .',
+      'a.md:8: npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
+      'a.md:9: git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
+    ]);
+  });
+
+  test('every npx hackmyagent and npx opena2a-cli command runs the published release', () => {
+    const guides = readdirSync(join(repoRoot, 'guides'))
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => `guides/${name}`);
+    const texts = ['README.md', ...guides].map((file) => [file, readFileSync(join(repoRoot, file), 'utf8')]);
+    assert.deepEqual(texts.flatMap(([file, text]) => unpinnedNpxCommands(file, text)), []);
+    for (const name of ['hackmyagent', 'opena2a-cli']) {
+      assert.ok(
+        texts.some(([, text]) => text.includes(`npx --yes ${name}@latest`)),
+        `no npx ${name} command found in README.md or the guides`,
+      );
+    }
   });
 });
 

@@ -69,11 +69,11 @@ Maintain a dedicated `org-souls` repository. Individual project repositories pul
 2. **Diff review.** Reviewers must read the actual diff. A single removed "never" can invert a security boundary.
 3. **Automated scanning.** Run HackMyAgent on every PR that modifies a soul file. `hackmyagent secure` reads the soul from the file named `SOUL.md` in the directory it scans:
    ```bash
-   npx hackmyagent secure .
+   npx --yes hackmyagent@latest secure .
    ```
 4. **Integrity re-signing.** After merge, re-sign the soul file:
    ```bash
-   npx opena2a-cli guard sign SOUL.md
+   npx --yes opena2a-cli@latest guard sign SOUL.md
    ```
 
 ### Who Can Modify Soul Files

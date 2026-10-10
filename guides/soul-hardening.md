@@ -30,17 +30,17 @@ Cryptographically sign your soul file so any modification is detectable.
 
 ```bash
 # Sign after review and approval
-npx opena2a-cli guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign SOUL.md
 
 # Verify before every agent session
-npx opena2a-cli guard verify
+npx --yes opena2a-cli@latest guard verify
 ```
 
 If the file has been modified since signing, verification fails. In CI, add this as a required step before any AI-assisted build phase:
 
 ```yaml
 - name: Verify soul integrity
-  run: npx opena2a-cli guard verify
+  run: npx --yes opena2a-cli@latest guard verify
 ```
 
 ### 2. Security Scanning with HackMyAgent
@@ -48,7 +48,7 @@ If the file has been modified since signing, verification fails. In CI, add this
 Scan soul files for prompt injection patterns before committing them. `hackmyagent secure` scans a directory and reads the soul from the file named `SOUL.md` in it, so run it in the directory that holds your `SOUL.md`:
 
 ```bash
-npx hackmyagent secure .
+npx --yes hackmyagent@latest secure .
 ```
 
 This detects instruction override attempts such as "ignore previous instructions", including ones hidden in a base64 payload (`CONFIG-002`), and override instructions placed in HTML comments (`LIFECYCLE-007`). It exits with status 1 when it finds a critical or high issue. The README's [Soul Hardening](../README.md#soul-hardening) section shows how to scan a soul file that is not named `SOUL.md` and how to judge a pattern match in context. Run this scan in your PR review workflow for any changes to `SOUL.md`, and treat a critical or high finding as merge-blocking. To clear a match a reviewer judges benign, reword the line so the pattern no longer appears and scan again: "Route to the correct system: tasks go to the task manager" matches `CONFIG-002` on `system:`, and "Route to the correct system, so tasks go to the task manager" does not. `--ignore CONFIG-002` only hides the finding from the list; the command still exits 1, so it does not clear the check.
@@ -65,10 +65,10 @@ This detects instruction override attempts such as "ignore previous instructions
 Measure the soul against the behavioral governance controls of the Open Agent Security Benchmark (OASB). Run it in the directory that holds your `SOUL.md`:
 
 ```bash
-npx hackmyagent scan-soul .
+npx --yes hackmyagent@latest scan-soul .
 ```
 
-`scan-soul` scores the soul's coverage of governance domains such as trust hierarchy, injection hardening, data handling and harm avoidance, and exits with status 1 when a critical control is not detected. It matches keywords, so a control written in other words can be reported missing. `npx hackmyagent secure -b oasb-2` combines this score with the OASB-1 scan of the project's configuration. Run the benchmark after any soul modification to detect regressions.
+`scan-soul` scores the soul's coverage of governance domains such as trust hierarchy, injection hardening, data handling and harm avoidance, and exits with status 1 when a critical control is not detected. It matches keywords, so a control written in other words can be reported missing. `npx --yes hackmyagent@latest secure -b oasb-2` combines this score with the OASB-1 scan of the project's configuration. Run the benchmark after any soul modification to detect regressions.
 
 ### 5. Least Privilege
 
@@ -103,10 +103,10 @@ If you suspect a soul file has been tampered with:
 
 1. **Stop the agent immediately.** Do not allow further execution until the soul is verified.
 2. **Check the git log:** `git log --oneline SOUL.md`
-3. **Run integrity verification:** `npx opena2a-cli guard verify`
-4. **Scan for injection:** `npx hackmyagent secure .` in the directory that holds `SOUL.md`
+3. **Run integrity verification:** `npx --yes opena2a-cli@latest guard verify`
+4. **Scan for injection:** `npx --yes hackmyagent@latest secure .` in the directory that holds `SOUL.md`
 5. **Review agent output** from the period of potential compromise.
-6. **Restore from a known-good commit:** `git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md`
+6. **Restore from a known-good commit:** `git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign SOUL.md`
 
 ---
 

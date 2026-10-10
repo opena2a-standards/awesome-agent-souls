@@ -161,8 +161,8 @@ cp -r souls/by-fleet/red-team-ops/ ./fleet/
 Sign your soul file to detect tampering:
 
 ```bash
-npx opena2a-cli guard sign SOUL.md
-npx opena2a-cli guard verify
+npx --yes opena2a-cli@latest guard sign SOUL.md
+npx --yes opena2a-cli@latest guard verify
 ```
 
 **Using OpenClaw?** Copy a soul directly into your agent workspace:
@@ -429,7 +429,7 @@ Ready-to-use soul files for common project types. Copy one into your project roo
 ```bash
 # Start a new website project with a soul
 cp souls/examples/website-project.md ./SOUL.md
-npx opena2a-cli guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign SOUL.md
 ```
 
 ---
@@ -474,7 +474,7 @@ A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could
 **Sign your soul file:**
 
 ```bash
-npx opena2a-cli guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign SOUL.md
 ```
 
 This creates a `.configguard/` directory containing the signature and metadata.
@@ -482,7 +482,7 @@ This creates a `.configguard/` directory containing the signature and metadata.
 **Verify before each session:**
 
 ```bash
-npx opena2a-cli guard verify
+npx --yes opena2a-cli@latest guard verify
 ```
 
 If the file has been modified since signing, verification fails and the agent should refuse to proceed. This prevents supply chain attacks where a compromised dependency or CI step silently alters agent instructions.
