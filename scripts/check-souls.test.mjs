@@ -1039,12 +1039,14 @@ describe('command line', () => {
 });
 
 // npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
-// command asks for @latest, and without --yes it stops to ask before installing. A period after @latest
-// ends the sentence unless a word character follows it, as in @latest.1, which names another release.
+// command asks for @latest, and without --yes it stops to ask before installing. A command is pinned
+// when `--yes <package>@latest` is followed by whitespace, a backtick, a sentence period or the end of
+// its line. A period after @latest ends the sentence unless a word character follows it, as in
+// @latest.1, which names another release.
 // An npx command runs the package named by its first word that is not an option, so prose such as
 // "npx downloads hackmyagent" names the package without running it.
 const NPX_PACKAGE = /^\s+(?:-\S*\s+)*(?:hackmyagent|opena2a-cli)\b/;
-const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?![\w-]|\.\w)/;
+const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?=[\s`]|\.(?!\w)|$)/;
 
 // The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
 // to read every one of them.
@@ -1075,7 +1077,7 @@ function unpinnedNpxCommands(file, text) {
 }
 
 describe('npx commands in README.md and the guides', () => {
-  test('a command is pinned when it ends at a backtick, a sentence period or the end of its line', () => {
+  test('a command is pinned when @latest is followed by whitespace, a backtick, a sentence period or the end of its line', () => {
     const text = [
       'Run it as `npx --yes hackmyagent@latest`.',
       'npx --yes hackmyagent@latest',
@@ -1088,6 +1090,10 @@ describe('npx commands in README.md and the guides', () => {
       'npx --yes hackmyagent@latest.1 secure .',
       'npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
       'git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
+      'npx --yes hackmyagent@latest/next secure .',
+      '(npx --yes opena2a-cli@latest) guard verify',
+      'Run npx --yes hackmyagent@latest, then read the report.',
+      "HACKMYAGENT='npx --yes hackmyagent@latest'",
     ].join('\n');
     assert.deepEqual(unpinnedNpxCommands('a.md', text), [
       'a.md:6: npx hackmyagent secure .',
@@ -1096,6 +1102,10 @@ describe('npx commands in README.md and the guides', () => {
       'a.md:9: npx --yes hackmyagent@latest.1 secure .',
       'a.md:10: npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
       'a.md:11: git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
+      'a.md:12: npx --yes hackmyagent@latest/next secure .',
+      'a.md:13: (npx --yes opena2a-cli@latest) guard verify',
+      'a.md:14: Run npx --yes hackmyagent@latest, then read the report.',
+      "a.md:15: HACKMYAGENT='npx --yes hackmyagent@latest'",
     ]);
   });
 
