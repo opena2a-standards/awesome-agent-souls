@@ -134,7 +134,12 @@ function listMarkdownFiles(root, dir) {
 // `name` is how a problem with the root itself names it, for example as typed after --root.
 export function checkRepository(root, name = root) {
   const problems = [];
-  const stats = statSync(root, { throwIfNoEntry: false });
+  let stats;
+  try {
+    stats = statSync(root, { throwIfNoEntry: false });
+  } catch (error) {
+    return { problems: [`${name}: cannot read (${error.code})`], fileCount: 0, ruleCount: 0 };
+  }
   if (!stats?.isDirectory()) {
     const problem = stats ? 'not a directory' : 'directory not found';
     return { problems: [`${name}: ${problem}`], fileCount: 0, ruleCount: 0 };

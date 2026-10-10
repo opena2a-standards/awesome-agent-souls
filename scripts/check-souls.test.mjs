@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -348,6 +348,21 @@ describe('checkRepository', () => {
     assert.deepEqual(checkRepository(missing).problems, [`${missing}: directory not found`]);
   });
 
+  test(
+    'reports a root that cannot be looked up by the name it is given',
+    { skip: process.platform === 'win32' ? 'creating a symbolic link needs extra rights on Windows' : false },
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), 'check-souls-loop-'));
+      roots.push(dir);
+      symlinkSync('loop', join(dir, 'loop'));
+      assert.deepEqual(checkRepository(join(dir, 'loop'), 'loop'), {
+        problems: ['loop: cannot read (ELOOP)'],
+        fileCount: 0,
+        ruleCount: 0,
+      });
+    },
+  );
+
   test('reports a guide without the requirements table', () => {
     const problems = fixture({ 'CONTRIBUTING.md': '# Guide\n\nNo table here.\n' });
     assert.equal(problems.length, 1);
@@ -659,6 +674,22 @@ describe('command line', () => {
       '',
     ]);
   });
+
+  test(
+    'reports a --root that is a symbolic link loop and exits 1',
+    { skip: process.platform === 'win32' ? 'creating a symbolic link needs extra rights on Windows' : false },
+    () => {
+      symlinkSync('loop', join(elsewhere, 'loop'));
+      const { status, stdout, stderr } = run(['--root', 'loop'], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'loop: cannot read (ELOOP)',
+        'Checked 0 files in loop against 0 rules from CONTRIBUTING.md: 1 problem.',
+        '',
+      ]);
+      assert.equal(stderr, '');
+    },
+  );
 
   test('help states the exit status for a --root directory that does not exist', () => {
     assert.match(run(['--help']).stdout, /1 problems found, including a --root\s+directory that does not exist/);
