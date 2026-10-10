@@ -92,7 +92,7 @@ Nothing runs automatically on pull requests: the repository has no CI workflow. 
    node scripts/check-souls.mjs
    ```
 
-   It checks every `.md` file under `souls/` and `templates/` against the [requirements table](#soul-file-requirements): the file sits at a listed location, carries the required frontmatter fields and sections, and, for files under `souls/`, is linked from README.md directly or through its fleet directory. It prints one line per problem and exits with a non-zero status if it finds any. If you change the script, also run `node --test scripts/check-souls.test.mjs`.
+   It checks every `.md` file under `souls/` and `templates/` against the [requirements table](#soul-file-requirements): the file sits at a listed location, carries the required frontmatter fields and sections, and, for files under `souls/`, is linked from README.md directly or through its fleet directory. A file under `templates/` must have a row in the README's [Templates](README.md#templates-4-templates) table whose last cell lists all of the template's `##` sections in file order, so a change to a template's sections also changes that row. It prints one line per problem and exits with a non-zero status if it finds any. If you change the script, also run `node --test scripts/check-souls.test.mjs`.
 
 2. **Injection scan.** Scan your file for prompt-injection patterns as described in [Soul Hardening](README.md#soul-hardening).
 

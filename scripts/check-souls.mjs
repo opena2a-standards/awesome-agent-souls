@@ -6,6 +6,9 @@
 // The table in CONTRIBUTING.md is the single source of the rules: where each
 // kind of file lives, which frontmatter fields it carries and which `##`
 // sections it contains. Changing the rules means editing that table.
+//
+// It also checks README.md: every soul is linked, and every template has a
+// table row whose last cell lists the template's `##` sections in file order.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -15,6 +18,7 @@ const GUIDE = 'CONTRIBUTING.md';
 const README = 'README.md';
 const SCANNED_DIRS = ['souls', 'templates'];
 const LINKED_DIR = 'souls';
+const TEMPLATE_DIR = 'templates';
 const HEADER = ['Dimension', 'Location', 'Required frontmatter', 'Required sections'];
 
 function splitRow(line) {
@@ -196,6 +200,26 @@ export function checkRepository(root) {
       const directory = `${file.slice(0, file.lastIndexOf('/'))}/`;
       if (!readme.includes(`](${file})`) && !readme.includes(`](${directory})`)) {
         problems.push(`${file}: not linked from ${README} (link the file, or its fleet directory)`);
+      }
+    }
+
+    if (file.startsWith(`${TEMPLATE_DIR}/`)) {
+      const rows = readme
+        .split(/\r?\n/)
+        .filter((line) => line.trim().startsWith('|') && line.includes(`](${file})`));
+      if (rows.length === 0) {
+        problems.push(
+          `${file}: no ${README} table row links it (add a row to the Templates table that lists its sections)`,
+        );
+      }
+      for (const row of rows) {
+        const listed = backticked(splitRow(row).at(-1));
+        if (listed.join('\n') !== headings.join('\n')) {
+          problems.push(
+            `${file}: ${README} lists sections ${listed.join(', ') || '(none)'}; ` +
+              `the file has ${headings.join(', ') || '(none)'}`,
+          );
+        }
       }
     }
   }

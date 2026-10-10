@@ -60,6 +60,24 @@ fleet: crew
 ## Constraints
 `;
 
+const BASE_README = '[helper](souls/by-use-case/helper.md)\n[crew](souls/by-fleet/crew/)\n';
+
+const GUIDE_WITH_TEMPLATE = `${GUIDE}| Template | \`templates/<name>.md\` | \`name\` | \`Identity\`, \`Harm Avoidance\` |
+`;
+
+const GOOD_TEMPLATE = `---
+name: basic-template
+---
+
+## Identity
+
+## Workflow
+
+## Harm Avoidance
+`;
+
+const TEMPLATE_ROW = '| [basic](templates/basic.md) | Answers questions | `Identity`, `Workflow`, `Harm Avoidance` |\n';
+
 describe('checkRepository', () => {
   const roots = [];
   after(() => {
@@ -71,7 +89,7 @@ describe('checkRepository', () => {
     roots.push(root);
     const all = {
       'CONTRIBUTING.md': GUIDE,
-      'README.md': '[helper](souls/by-use-case/helper.md)\n[crew](souls/by-fleet/crew/)\n',
+      'README.md': BASE_README,
       'souls/by-use-case/helper.md': GOOD_USE_CASE,
       'souls/by-fleet/crew/lead-agent.md': GOOD_FLEET_MEMBER,
       ...files,
@@ -180,6 +198,42 @@ describe('checkRepository', () => {
     const problems = fixture({ 'souls/by-fleet/crew/lead-agent.md': null });
     assert.deepEqual(problems, [
       'CONTRIBUTING.md: no file matches `souls/by-fleet/<fleet>/<name>-agent.md` (By Fleet, member)',
+    ]);
+  });
+
+  function templateFixture({ readme = BASE_README + TEMPLATE_ROW, template = GOOD_TEMPLATE } = {}) {
+    return fixture({
+      'CONTRIBUTING.md': GUIDE_WITH_TEMPLATE,
+      'README.md': readme,
+      'templates/basic.md': template,
+    });
+  }
+
+  test('accepts a template whose README row lists its sections in file order', () => {
+    assert.deepEqual(templateFixture(), []);
+  });
+
+  test('reports a template that no README table row links', () => {
+    const expected = [
+      'templates/basic.md: no README.md table row links it (add a row to the Templates table that lists its sections)',
+    ];
+    assert.deepEqual(templateFixture({ readme: BASE_README }), expected);
+    assert.deepEqual(templateFixture({ readme: `${BASE_README}See [basic](templates/basic.md).\n` }), expected);
+    assert.deepEqual(templateFixture({ readme: `${BASE_README}| [all](templates/) | Templates | \`Identity\` |\n` }), expected);
+  });
+
+  test('reports a README row whose sections differ from the template', () => {
+    const fewer = TEMPLATE_ROW.replace('`Workflow`, ', '');
+    assert.deepEqual(templateFixture({ readme: BASE_README + fewer }), [
+      'templates/basic.md: README.md lists sections Identity, Harm Avoidance; the file has Identity, Workflow, Harm Avoidance',
+    ]);
+    const reordered = GOOD_TEMPLATE.replace('## Identity\n\n## Workflow', '## Workflow\n\n## Identity');
+    assert.deepEqual(templateFixture({ template: reordered }), [
+      'templates/basic.md: README.md lists sections Identity, Workflow, Harm Avoidance; the file has Workflow, Identity, Harm Avoidance',
+    ]);
+    const extra = GOOD_TEMPLATE.replace('## Harm Avoidance', '## Tool Permissions\n\n## Harm Avoidance');
+    assert.deepEqual(templateFixture({ template: extra }), [
+      'templates/basic.md: README.md lists sections Identity, Workflow, Harm Avoidance; the file has Identity, Workflow, Tool Permissions, Harm Avoidance',
     ]);
   });
 });

@@ -105,7 +105,8 @@ monorepo/
 - [By Organization Type (7 souls)](#by-organization-type-7-souls)
 - [By Use Case (6 souls)](#by-use-case-6-souls)
 - [By Fleet (15 teams)](#by-fleet-15-teams)
-- [Starter Examples (2 templates)](#starter-examples-2-templates)
+- [Starter Examples (2 souls)](#starter-examples-2-souls)
+- [Templates (4 templates)](#templates-4-templates)
 - [Guides](#guides)
 - [Soul Integrity](#soul-integrity)
 - [Soul Hardening](#soul-hardening)
@@ -416,11 +417,11 @@ Fleets use one of four coordination patterns defined in their `FLEET.md`:
 
 ---
 
-## Starter Examples (2 templates)
+## Starter Examples (2 souls)
 
 Ready-to-use soul files for common project types. Copy one into your project root and customize from there.
 
-| Template | Use Case | What It Includes |
+| Example | Use Case | What It Includes |
 |----------|----------|------------------|
 | [website-project](souls/examples/website-project.md) | Web applications, marketing sites, SaaS products | Frontend standards, accessibility, performance budgets, SEO |
 | [open-source-repo](souls/examples/open-source-repo.md) | Open-source libraries, CLIs, frameworks | Contributor experience, semantic versioning, documentation quality |
@@ -429,6 +430,26 @@ Ready-to-use soul files for common project types. Copy one into your project roo
 # Start a new website project with a soul
 cp souls/examples/website-project.md ./SOUL.md
 npx opena2a-cli guard sign SOUL.md
+```
+
+---
+
+## Templates (4 templates)
+
+Skeleton soul files to write a new soul from, one for each kind of agent. In the body, text in square brackets, such as `[role]`, marks what you fill in: replace every bracketed part before you use the file, and keep or edit the rest. The `Harm Avoidance` section of every template is already filled in.
+
+| Template | For an agent that | Sections, in file order |
+|----------|-------------------|-------------------------|
+| [basic](templates/basic.md) | Answers questions and provides information without using external tools | `Identity`, `Communication Style`, `Workflow`, `Boundaries`, `Domain Knowledge`, `Harm Avoidance` |
+| [tool-using](templates/tool-using.md) | Works with external tools, APIs, file systems or databases | `Identity`, `Communication Style`, `Workflow`, `Tool Permissions`, `Boundaries`, `Domain Knowledge`, `Harm Avoidance` |
+| [agentic](templates/agentic.md) | Plans and carries out multi-step tasks on its own, with tool access and authority to make decisions | `Identity`, `Communication Style`, `Workflow`, `Autonomy Boundaries`, `Boundaries`, `Domain Knowledge`, `Harm Avoidance` |
+| [multi-agent](templates/multi-agent.md) | Works as one member of a coordinated team of agents, with defined handoffs and shared rules | `Identity`, `Communication Style`, `Workflow`, `Coordination`, `Boundaries`, `Domain Knowledge`, `Harm Avoidance` |
+
+`basic` has six sections. Each of the other three adds one more after `Workflow`: `Tool Permissions`, `Autonomy Boundaries` or `Coordination`.
+
+```bash
+# Start a soul for an agent that uses tools
+cp templates/tool-using.md ./SOUL.md
 ```
 
 ---
@@ -541,7 +562,7 @@ Areas where contributions are particularly valuable:
 - **By Role:** Souls for specialized roles (database administrator, QA engineer, technical product manager)
 - **By Use Case:** Souls for common agent workflows (voice journaling, brand monitoring, lead qualification, report generator)
 - **By Fleet:** Teams for workflows not yet covered (marketing operations, product launch, security compliance)
-- **Starter Examples:** Templates for common project types (mobile app, CLI tool, microservice, data pipeline)
+- **Starter Examples:** Souls for common project types (mobile app, CLI tool, microservice, data pipeline)
 
 ---
 
