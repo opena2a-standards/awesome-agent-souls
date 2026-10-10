@@ -30,21 +30,34 @@ function backticked(text) {
 }
 
 // Splits a location into its `/`-separated segments. A segment is its placeholder names and the
-// literal texts around them: `literals` has one more entry than `names`.
+// literal texts around them: `literals` has one more entry than `names`. A placeholder is a `<`, one
+// or more characters other than `>`, and a `>`. The location is scanned with indexOf rather than
+// split with a regular expression, which took time quadratic in the number of `<` without a `>`.
 function splitPattern(pattern) {
   const segments = [{ literals: [''], names: [] }];
-  for (const part of pattern.split(/(<[^>]+>)/)) {
+  const addLiteral = (text) => {
+    const [first, ...rest] = text.split('/');
     const segment = segments.at(-1);
-    const placeholder = part.match(/^<([^>]+)>$/);
-    if (placeholder) {
-      segment.names.push(placeholder[1]);
-      segment.literals.push('');
-      continue;
-    }
-    const [first, ...rest] = part.split('/');
     segment.literals[segment.literals.length - 1] += first;
     for (const literal of rest) segments.push({ literals: [literal], names: [] });
+  };
+  let done = 0;
+  let open = pattern.indexOf('<');
+  while (open !== -1) {
+    const close = pattern.indexOf('>', open + 1);
+    if (close === -1) break;
+    if (close === open + 1) {
+      open = pattern.indexOf('<', close);
+      continue;
+    }
+    addLiteral(pattern.slice(done, open));
+    const segment = segments.at(-1);
+    segment.names.push(pattern.slice(open + 1, close));
+    segment.literals.push('');
+    done = close + 1;
+    open = pattern.indexOf('<', done);
   }
+  addLiteral(pattern.slice(done));
   return segments;
 }
 
@@ -382,13 +395,15 @@ function count(n, noun) {
 
 const ESCAPES = { '\t': '\\t', '\n': '\\n', '\r': '\\r' };
 
-// Writes each control character as a visible escape such as \n or \x1b, so that a file name cannot
-// start an output line of its own or change how the terminal shows the output.
+// Writes each control character, format character (such as a right-to-left override or a zero width
+// space) and line or paragraph separator as a visible escape such as \n, \x1b or \u{202e}, so that a
+// file name cannot start an output line of its own or change how the terminal shows the output.
 function printable(text) {
-  return text.replace(
-    /[\x00-\x1f\x7f-\x9f]/g,
-    (char) => ESCAPES[char] ?? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`,
-  );
+  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (char) => {
+    if (ESCAPES[char]) return ESCAPES[char];
+    const code = char.codePointAt(0).toString(16);
+    return code.length <= 2 ? `\\x${code.padStart(2, '0')}` : `\\u{${code}}`;
+  });
 }
 
 // The working directory, or null when it has been removed.

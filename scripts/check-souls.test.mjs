@@ -783,6 +783,23 @@ describe('readRules and readSections', () => {
     assert.equal(rule.match('souls/x/y/a-agent.md'), null);
   });
 
+  test('rejects a path with more or fewer segments than the location, even when each segment matches', () => {
+    const [rule] = readRules(`${TABLE_HEADER}| Odd | \`souls/<a><b>/<name>-agent.md\` | | |\n`);
+    assert.equal(rule.match('souls/xy/a-agent.md/extra'), null);
+    assert.equal(rule.match('souls/xy'), null);
+  });
+
+  test('reads a location with a long run of < and no closing > quickly, as literal text', () => {
+    // Splitting the location with a regular expression took about 8 seconds for this run.
+    const run = '<'.repeat(100_000);
+    const start = performance.now();
+    const [rule] = readRules(`${TABLE_HEADER}| Odd | \`souls/<name><>/${run}.md\` | | |\n`);
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 1000, `read in ${Math.round(elapsed)} ms`);
+    assert.deepEqual(rule.match(`souls/crew<>/${run}.md`), { name: 'crew' });
+    assert.equal(rule.match('souls/crew<>/x.md'), null);
+  });
+
   test('reads level-2 headings only', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',
@@ -1009,6 +1026,29 @@ describe('command line', () => {
       }
     },
   );
+
+  test('prints format characters and line or paragraph separators in a file name as escapes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-format-'));
+    try {
+      mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+      writeFileSync(join(root, 'README.md'), '');
+      // A right-to-left override, zero width space, soft hyphen, line and paragraph separators and a
+      // tag character outside the Basic Multilingual Plane.
+      const name = 'a\u{202e}b\u{200b}c\xadd\u{2028}e\u{2029}f\u{e0041}g.md';
+      writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
+      const { status, stdout } = run(['--root', root], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/a\\u{202e}b\\u{200b}c\\xadd\\u{2028}e\\u{2029}f\\u{e0041}g.md: ' +
+          'missing YAML frontmatter between two --- lines at the top of the file',
+        `Checked 1 file in ${root} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   test(
     'names the root by its absolute path when the working directory has been removed',
