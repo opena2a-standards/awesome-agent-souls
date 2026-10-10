@@ -1303,8 +1303,8 @@ const GUARD_SIGN_FILES = /^[ \t]+--files\b/;
 const GUARD_DIR = '.opena2a/guard/';
 const GUARD_STORE = `${GUARD_DIR}signatures.json`;
 
-// Returns `<file>:<line>: <text>` for each line of a markdown file with a `guard sign` command that does
-// not name its files after --files. Each `guard sign` on a line is checked.
+// Returns `<file>:<line>: <text>` for each line of a markdown file with a `guard sign` command that is not
+// followed by --files. Each `guard sign` on a line is checked. Whether file names follow --files is not.
 function unnamedGuardSigns(file, text) {
   return text.split('\n').flatMap((line, index) => {
     const unnamed = [...line.matchAll(GUARD_SIGN)].some(([, rest]) => !GUARD_SIGN_FILES.test(rest));
@@ -1380,7 +1380,7 @@ function guardProblems(command, commands, soul, { timeout = SCAN_TIMEOUT_MS } = 
 }
 
 describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
-  test('a guard sign command names its files after --files', () => {
+  test('a guard sign command is followed by --files', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
       'Sign it with `guard sign --files SOUL.md`.',
@@ -1397,7 +1397,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
-  test('a guard sign command names its files when its words are separated by more than one space or a tab', () => {
+  test('a guard sign command is followed by --files when its words are separated by more than one space or a tab', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign  --files SOUL.md',
       'npx --yes opena2a-cli@latest guard  sign --files SOUL.md',
@@ -1458,7 +1458,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
-  test('every guard sign command names its files, and one signs SOUL.md and one verifies it', () => {
+  test('every guard sign command is followed by --files, and one signs SOUL.md and one verifies it', () => {
     const texts = docTexts();
     assert.deepEqual(texts.flatMap(([file, text]) => unnamedGuardSigns(file, text)), []);
     const commands = guardCommands(texts);
@@ -1470,6 +1470,16 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       commands.some((words) => words[1] === 'verify'),
       'no npx opena2a-cli guard verify command found in README.md, CONTRIBUTING.md or the guides',
     );
+  });
+
+  // The check accepts a guard sign --files with no file after it, so README.md can describe the command in
+  // prose. Only the opt-in OPENA2A_CLI run, which runs each npx guard sign command, would find one that signs
+  // nothing.
+  test('CONTRIBUTING.md says the default run checks guard sign for --files, not for the files after it', () => {
+    assert.deepEqual(unnamedGuardSigns('a.md', 'Then run `npx --yes opena2a-cli@latest guard sign --files` to sign.'), []);
+    const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
+    assert.match(guide, /It does not check that file names follow `--files`\./);
+    assert.doesNotMatch(guide, /followed by the files it signs|names its files after/);
   });
 
   test('README.md, CONTRIBUTING.md and the guides name the directory guard sign writes to', () => {
