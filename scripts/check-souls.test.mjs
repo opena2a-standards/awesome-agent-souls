@@ -1,6 +1,7 @@
 // Run with: node --test scripts/check-souls.test.mjs
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -145,6 +146,40 @@ describe('checkRepository', () => {
     assert.deepEqual(problems, ['souls/by-use-case/helper.md: missing section ## Harm Avoidance']);
   });
 
+  test('accepts a soul with sections beyond the required ones', () => {
+    const problems = fixture({
+      'souls/by-use-case/helper.md': GOOD_USE_CASE.replace(
+        '## Harm Avoidance',
+        '## Values and Principles\n\n## Harm Avoidance',
+      ),
+    });
+    assert.deepEqual(problems, []);
+  });
+
+  test('reports a file without frontmatter', () => {
+    const problems = fixture({
+      'souls/by-use-case/helper.md': GOOD_USE_CASE.slice(GOOD_USE_CASE.indexOf('## Identity')),
+    });
+    assert.deepEqual(problems, [
+      'souls/by-use-case/helper.md: missing YAML frontmatter between two --- lines at the top of the file',
+    ]);
+  });
+
+  test('reports a frontmatter field that is present with an empty value', () => {
+    const problems = fixture({
+      'souls/by-use-case/helper.md': GOOD_USE_CASE.replace('name: helper', 'name:'),
+    });
+    assert.deepEqual(problems, ['souls/by-use-case/helper.md: missing frontmatter field `name`']);
+  });
+
+  test('accepts quoted frontmatter values', () => {
+    const problems = fixture({
+      'souls/by-use-case/helper.md': GOOD_USE_CASE.replace('category: use-case', 'category: "use-case"'),
+      'souls/by-fleet/crew/lead-agent.md': GOOD_FLEET_MEMBER.replace('fleet: crew', "fleet: 'crew'"),
+    });
+    assert.deepEqual(problems, []);
+  });
+
   test('reports a missing frontmatter field and a wrong fixed value', () => {
     const problems = fixture({
       'souls/by-use-case/helper.md': GOOD_USE_CASE.replace('name: helper\n', '').replace(
@@ -251,5 +286,41 @@ describe('readRules and readSections', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',
     ]);
+  });
+});
+
+describe('command line', () => {
+  const script = join(repoRoot, 'scripts', 'check-souls.mjs');
+  const elsewhere = mkdtempSync(join(tmpdir(), 'check-souls-cwd-'));
+  after(() => rmSync(elsewhere, { recursive: true, force: true }));
+
+  function run(args, cwd = repoRoot) {
+    return spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
+  }
+
+  for (const flag of ['--help', '-h']) {
+    test(`${flag} prints usage and exits 0`, () => {
+      const { status, stdout, stderr } = run([flag]);
+      assert.equal(status, 0);
+      assert.match(stdout, /^Usage: node scripts\/check-souls\.mjs \[--root <dir>\]/);
+      assert.match(stdout, /--root <dir>/);
+      assert.equal(stderr, '');
+    });
+  }
+
+  test('an unknown argument prints usage to stderr and exits 2', () => {
+    const { status, stderr } = run(['--bogus']);
+    assert.equal(status, 2);
+    assert.match(stderr, /^Unknown argument: --bogus\nUsage: /);
+  });
+
+  test('names the root relative to the working directory when it is inside it', () => {
+    assert.match(run([]).stdout, / files in \. against /);
+  });
+
+  test('names the root by its absolute path when run from outside it', () => {
+    const { stdout } = run(['--root', repoRoot], elsewhere);
+    assert.ok(stdout.includes(` files in ${repoRoot} against `), stdout);
+    assert.ok(!stdout.includes(' files in ..'), stdout);
   });
 });

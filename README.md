@@ -500,18 +500,26 @@ If the file has been modified since signing, verification fails and the agent sh
 
 Soul files are written in markdown and read by AI agents, which makes them a target for prompt injection. A malicious soul file could instruct an agent to exfiltrate data, bypass safety checks, or execute arbitrary commands.
 
-Use [HackMyAgent](https://github.com/opena2a-org/hackmyagent) to scan soul files for injection patterns:
+Use [HackMyAgent](https://github.com/opena2a-org/hackmyagent) to scan soul files for injection patterns. `hackmyagent secure` scans a directory and reads the soul from the file named `SOUL.md` in it, so run it in the project that holds your `SOUL.md`:
 
 ```bash
-npx hackmyagent scan SOUL.md --checks prompt-injection
+npx hackmyagent secure .
 ```
 
-This detects common injection patterns including:
+To scan a soul from this repository, copy it into a directory of its own as `SOUL.md` and scan that directory:
 
-- Instruction override attempts ("ignore previous instructions")
-- Hidden instructions in markdown comments or HTML tags
-- Encoded payloads (base64, URL encoding, Unicode tricks)
-- Boundary escape sequences
+```bash
+mkdir -p /tmp/soul-scan
+cp souls/by-use-case/personal-assistant.md /tmp/soul-scan/SOUL.md
+npx hackmyagent secure /tmp/soul-scan
+```
+
+Among the findings for `SOUL.md`, the injection checks report:
+
+- Instruction override attempts such as "ignore previous instructions", including ones hidden in a base64 payload (`CONFIG-002`, SOUL.md Injection Vectors)
+- Instructions hidden in HTML comments, which readers of the rendered markdown do not see (`LIFECYCLE-007`)
+
+The command exits with status 1 when it finds a critical or high issue. The injection check matches patterns in the text, so ordinary wording can match one: `system:` in "Route to the correct system: tasks go to the task manager" is reported as an injection vector. Add `--json` to see the pattern a `CONFIG-002` finding matched, in its `message` field, and judge it in context.
 
 Run this scan as part of your PR review process for any changes to `SOUL.md`.
 

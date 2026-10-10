@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Checks every soul file against the requirements table in CONTRIBUTING.md.
 //
-// Usage: node scripts/check-souls.mjs [--root <repository directory>]
+// Usage: node scripts/check-souls.mjs [--root <repository directory>] [--help]
 //
 // The table in CONTRIBUTING.md is the single source of the rules: where each
 // kind of file lives, which frontmatter fields it carries and which `##`
@@ -11,7 +11,7 @@
 // table row whose last cell lists the template's `##` sections in file order.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const GUIDE = 'CONTRIBUTING.md';
@@ -233,19 +233,44 @@ export function checkRepository(root) {
   return { problems, fileCount: files.length, ruleCount: rules.length };
 }
 
+const USAGE = 'Usage: node scripts/check-souls.mjs [--root <dir>]';
+
+const HELP = `${USAGE}
+
+Checks every .md file under souls/ and templates/ against the requirements
+table in ${GUIDE}, and checks that ${README} links every soul and lists
+every template's sections. Prints one line per problem.
+
+Options:
+  --root <dir>  Repository directory to check (default: the repository
+                that contains this script)
+  -h, --help    Show this help
+
+Exit status: 0 no problems, 1 problems found, 2 unknown argument.`;
+
+function displayRoot(root, cwd) {
+  const fromCwd = relative(cwd, root);
+  if (isAbsolute(fromCwd) || fromCwd === '..' || fromCwd.startsWith(`..${sep}`)) return root;
+  return fromCwd.split(sep).join('/') || '.';
+}
+
 function main(argv) {
   let root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--help' || argv[i] === '-h') {
+      console.log(HELP);
+      return 0;
+    }
     if (argv[i] === '--root' && argv[i + 1]) {
       root = resolve(argv[++i]);
     } else {
-      console.error(`Unknown argument: ${argv[i]}\nUsage: node scripts/check-souls.mjs [--root <dir>]`);
+      console.error(`Unknown argument: ${argv[i]}\n${USAGE}`);
       return 2;
     }
   }
   const { problems, fileCount, ruleCount } = checkRepository(root);
   for (const problem of problems) console.log(problem);
-  const where = relative(process.cwd(), root).split(sep).join('/') || '.';
+  const where = displayRoot(root, process.cwd());
   console.log(
     `Checked ${fileCount} files in ${where} against ${ruleCount} rules from ${GUIDE}: ` +
       `${problems.length} problem${problems.length === 1 ? '' : 's'}.`,
