@@ -854,6 +854,13 @@ describe('command line', () => {
     assert.match(stderr, /^Unknown argument: --bogus\nUsage: /);
   });
 
+  test('prints an unknown argument as a path, keeping the backslashes of a Windows path on Windows', () => {
+    const { status, stderr } = run(['C:\\repo']);
+    assert.equal(status, 2);
+    const shown = process.platform === 'win32' ? 'C:\\repo' : 'C:\\\\repo';
+    assert.equal(stderr.split('\n')[0], `Unknown argument: ${shown}`);
+  });
+
   for (const args of [['--root'], ['--root', '--help'], ['--root', '-h']]) {
     test(`${args.join(' ')} reports the missing directory and exits 2`, () => {
       const { status, stdout, stderr } = run(args);
@@ -1089,6 +1096,31 @@ describe('command line', () => {
     }
   });
 
+  test('prints the musical null notehead and private-use and unassigned code points as escapes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-unassigned-'));
+    try {
+      mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+      writeFileSync(join(root, 'README.md'), '');
+      // The null notehead is a symbol drawn as blank space. Some file systems do not accept a name with
+      // an unassigned code point, so that one is given as an unknown argument instead.
+      writeFileSync(join(root, 'souls', 'by-use-case', 'a\u{1d159}b\u{e000}c.md'), '## Identity\n');
+      const { status, stdout } = run(['--root', root], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/a\\u{1d159}b\\u{e000}c.md: ' +
+          'missing YAML frontmatter between two --- lines at the top of the file',
+        `Checked 1 file in ${root} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+      const unknown = run(['a\u{378}b'], elsewhere);
+      assert.equal(unknown.status, 2);
+      assert.equal(unknown.stderr.split('\n')[0], 'Unknown argument: a\\u{378}b');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test(
     'prints a backslash in a file or root name as \\\\, unlike the escape of a format character',
     { skip: process.platform === 'win32' ? 'Windows file names cannot contain a backslash' : false },
@@ -1119,6 +1151,23 @@ describe('command line', () => {
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
+    },
+  );
+
+  test(
+    'on Windows prints a --root directory that does not exist with the backslashes of its path kept',
+    { skip: process.platform === 'win32' ? false : 'a backslash separates the parts of a path only on Windows' },
+    () => {
+      // A path beside the working directory, so the root is named by its absolute path.
+      const missing = join(`${elsewhere}-missing`, 'no-such-dir');
+      assert.ok(missing.includes('\\'), missing);
+      const { status, stdout } = run(['--root', missing], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        `${missing}: directory not found`,
+        `Checked 0 files in ${missing} against 0 rules from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
     },
   );
 
@@ -1185,10 +1234,14 @@ function docTexts() {
 // Returns `<file>:<line>: <text>` for each line of a markdown file with an npx command that runs
 // hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked against
 // the rest of its line, so the check sees the character that follows @latest even when it is a later
-// npx, as in @latest.npx.
+// npx, as in @latest.npx. Only an npx that ends a word can be followed by the whitespace a command
+// needs, and an npx in a word that starts with -, such as --use-npx, is part of an option and is
+// skipped. Each option word after an npx is then read once, rather than once for every npx before it.
 function unpinnedNpxCommands(file, text) {
   return text.split('\n').flatMap((line, index) => {
-    const commands = [...line.matchAll(/\bnpx\b/g)].map((match) => line.slice(match.index + 'npx'.length));
+    const commands = [...line.matchAll(/\S+/g)]
+      .filter(([word]) => !word.startsWith('-') && /\bnpx$/.test(word))
+      .map((match) => line.slice(match.index + match[0].length));
     const unpinned = commands.some((command) => NPX_PACKAGE.test(command) && !NPX_PINNED.test(command));
     return unpinned ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
@@ -1235,11 +1288,30 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       'With npx, opena2a-cli runs without a global install.',
       'npx -y hackmyagent secure .',
       'Run `npx --yes --quiet hackmyagent@latest secure .` from the project root.',
+      'Pass --use-npx hackmyagent to the installer.',
     ].join('\n');
     assert.deepEqual(unpinnedNpxCommands('a.md', text), [
       'a.md:3: npx -y hackmyagent secure .',
       'a.md:4: Run `npx --yes --quiet hackmyagent@latest secure .` from the project root.',
     ]);
+  });
+
+  test('checks a long line of option words that contain npx in linear time', () => {
+    // Returns the time taken to check a line of the given number of option words. Checking each npx
+    // against the whole rest of its line took about 0.8 seconds for 8,000 words.
+    const check = (words) => {
+      const line = `npx ${'-npx '.repeat(words)}`;
+      const start = performance.now();
+      assert.deepEqual(unpinnedNpxCommands('a.md', line), []);
+      return performance.now() - start;
+    };
+    const elapsed = check(20_000);
+    assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+    // As for the backslash runs above, the times at two lengths four times apart are compared, each the
+    // fastest of ten checks.
+    const fastest = (words) => Math.min(...Array.from({ length: 10 }, () => check(words)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the words took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a command is pinned when its words are separated by more than one space or a tab', () => {
