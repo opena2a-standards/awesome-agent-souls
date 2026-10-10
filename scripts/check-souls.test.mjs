@@ -816,6 +816,15 @@ describe('readRules and readSections', () => {
     assert.ok(elapsed < 1000, `matched in ${Math.round(elapsed)} ms`);
   });
 
+  test('matches a location with as many placeholders as the name has characters left after the literals', () => {
+    const placeholders = Array.from({ length: 300 }, (_, i) => `<p${i}>`).join('');
+    const [rule] = readRules(`${TABLE_HEADER}| Odd | \`souls/x${placeholders}.md\` | | |\n`);
+    const each = (first) => Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`p${i}`, i === 0 ? first : 'y']));
+    assert.deepEqual(rule.match(`souls/x${'y'.repeat(300)}.md`), each('y'));
+    assert.deepEqual(rule.match(`souls/x${'y'.repeat(301)}.md`), each('yy'));
+    assert.equal(rule.match(`souls/x${'y'.repeat(299)}.md`), null);
+  });
+
   test('reads level-2 headings only', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',
