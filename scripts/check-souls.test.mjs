@@ -783,6 +783,12 @@ describe('readRules and readSections', () => {
     assert.equal(rule.match('souls/x/y/a-agent.md'), null);
   });
 
+  test('rejects a path with more or fewer segments than the location, even when each segment matches', () => {
+    const [rule] = readRules(`${TABLE_HEADER}| Odd | \`souls/<a><b>/<name>-agent.md\` | | |\n`);
+    assert.equal(rule.match('souls/xy/a-agent.md/extra'), null);
+    assert.equal(rule.match('souls/xy'), null);
+  });
+
   test('reads level-2 headings only', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',
