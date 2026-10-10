@@ -45,13 +45,13 @@ If the file has been modified since signing, verification fails. In CI, add this
 
 ### 2. Security Scanning with HackMyAgent
 
-Scan soul files for prompt injection patterns before committing them.
+Scan soul files for prompt injection patterns before committing them. `hackmyagent secure` scans a directory and reads the soul from the file named `SOUL.md` in it, so run it in the directory that holds your `SOUL.md`:
 
 ```bash
-npx hackmyagent scan --target SOUL.md
+npx hackmyagent secure .
 ```
 
-This detects instruction override attempts, hidden instructions in markdown comments or HTML tags, encoded payloads, boundary escape sequences, and Unicode manipulation. Run this scan in your PR review workflow for any changes to `SOUL.md`. Treat findings as merge-blocking.
+This detects instruction override attempts such as "ignore previous instructions", including ones hidden in a base64 payload (`CONFIG-002`), and override instructions placed in HTML comments (`LIFECYCLE-007`). It exits with status 1 when it finds a critical or high issue. The README's [Soul Hardening](../README.md#soul-hardening) section shows how to scan a soul file that is not named `SOUL.md` and how to judge a pattern match in context. Run this scan in your PR review workflow for any changes to `SOUL.md`. Treat findings as merge-blocking.
 
 ### 3. Version Control Discipline
 
@@ -62,13 +62,13 @@ This detects instruction override attempts, hidden instructions in markdown comm
 
 ### 4. OASB Benchmarking
 
-Measure your agent's security posture using the Open Agent Security Benchmark.
+Measure the soul against the behavioral governance controls of the Open Agent Security Benchmark (OASB). Run it in the directory that holds your `SOUL.md`:
 
 ```bash
-npx hackmyagent benchmark --soul SOUL.md
+npx hackmyagent scan-soul .
 ```
 
-OASB evaluates whether the soul defines explicit refusal boundaries, privilege constraints, adversarial input handling, and output constraints. Run the benchmark after any soul modification to detect regressions.
+`scan-soul` scores the soul's coverage of governance domains such as trust hierarchy, injection hardening, data handling and harm avoidance, and exits with status 1 when a critical control is not detected. It matches keywords, so a control written in other words can be reported missing. `npx hackmyagent secure -b oasb-2` combines this score with the OASB-1 scan of the project's configuration. Run the benchmark after any soul modification to detect regressions.
 
 ### 5. Least Privilege
 
@@ -104,7 +104,7 @@ If you suspect a soul file has been tampered with:
 1. **Stop the agent immediately.** Do not allow further execution until the soul is verified.
 2. **Check the git log:** `git log --oneline SOUL.md`
 3. **Run integrity verification:** `npx opena2a-cli guard verify`
-4. **Scan for injection:** `npx hackmyagent scan --target SOUL.md`
+4. **Scan for injection:** `npx hackmyagent secure .` in the directory that holds `SOUL.md`
 5. **Review agent output** from the period of potential compromise.
 6. **Restore from a known-good commit:** `git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md`
 

@@ -137,8 +137,8 @@ After finalizing, harden the file against tampering:
 
 ```bash
 npx opena2a-cli guard sign SOUL.md          # Integrity signing
-npx hackmyagent scan --target SOUL.md        # Injection scanning
-npx hackmyagent benchmark --soul SOUL.md     # Security benchmarking
+npx hackmyagent secure .                     # Injection scanning (reads ./SOUL.md)
+npx hackmyagent scan-soul .                  # Governance coverage (OASB)
 ```
 
 Commit both `SOUL.md` and `.configguard/` to version control.

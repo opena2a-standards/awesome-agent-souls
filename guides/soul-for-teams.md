@@ -67,9 +67,9 @@ Maintain a dedicated `org-souls` repository. Individual project repositories pul
 
 1. **Mandatory review.** All soul changes require at least one approving review. Security boundary changes require security team review.
 2. **Diff review.** Reviewers must read the actual diff. A single removed "never" can invert a security boundary.
-3. **Automated scanning.** Run HackMyAgent on every PR that modifies a soul file:
+3. **Automated scanning.** Run HackMyAgent on every PR that modifies a soul file. `hackmyagent secure` reads the soul from the file named `SOUL.md` in the directory it scans:
    ```bash
-   npx hackmyagent scan --target SOUL.md
+   npx hackmyagent secure .
    ```
 4. **Integrity re-signing.** After merge, re-sign the soul file:
    ```bash

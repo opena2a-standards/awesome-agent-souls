@@ -514,12 +514,12 @@ cp souls/by-use-case/personal-assistant.md /tmp/soul-scan/SOUL.md
 npx hackmyagent secure /tmp/soul-scan
 ```
 
-Among the findings for `SOUL.md`, the injection checks report:
+The injection checks that read `SOUL.md` detect:
 
 - Instruction override attempts such as "ignore previous instructions", including ones hidden in a base64 payload (`CONFIG-002`, SOUL.md Injection Vectors)
-- Instructions hidden in HTML comments, which readers of the rendered markdown do not see (`LIFECYCLE-007`)
+- Override instructions placed in an HTML comment, which readers of the rendered markdown do not see (`LIFECYCLE-007`)
 
-The command exits with status 1 when it finds a critical or high issue. The injection check matches patterns in the text, so ordinary wording can match one: `system:` in "Route to the correct system: tasks go to the task manager" is reported as an injection vector. Add `--json` to see the pattern a `CONFIG-002` finding matched, in its `message` field, and judge it in context.
+The command exits with status 1 when it finds a critical or high issue. The injection check matches patterns in the text, so ordinary wording can match one. `personal-assistant.md` has no HTML comment, and its one injection finding is a `CONFIG-002` match on `system:` in "Route to the correct system: tasks go to the task manager". Add `--json` to see the pattern a `CONFIG-002` finding matched, in its `message` field, and judge it in context.
 
 Run this scan as part of your PR review process for any changes to `SOUL.md`.
 

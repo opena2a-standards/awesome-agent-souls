@@ -243,10 +243,12 @@ every template's sections. Prints one line per problem.
 
 Options:
   --root <dir>  Repository directory to check (default: the repository
-                that contains this script)
+                that contains this script). To name a directory that
+                starts with -, write it as ./-name
   -h, --help    Show this help
 
-Exit status: 0 no problems, 1 problems found, 2 unknown argument.`;
+Exit status: 0 no problems, 1 problems found, 2 unknown argument or
+--root without a directory.`;
 
 function displayRoot(root, cwd) {
   const fromCwd = relative(cwd, root);
@@ -261,8 +263,14 @@ function main(argv) {
       console.log(HELP);
       return 0;
     }
-    if (argv[i] === '--root' && argv[i + 1]) {
-      root = resolve(argv[++i]);
+    if (argv[i] === '--root') {
+      const value = argv[i + 1];
+      if (!value || value.startsWith('-')) {
+        console.error(`Missing directory after --root\n${USAGE}`);
+        return 2;
+      }
+      root = resolve(value);
+      i++;
     } else {
       console.error(`Unknown argument: ${argv[i]}\n${USAGE}`);
       return 2;

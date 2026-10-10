@@ -165,6 +165,13 @@ describe('checkRepository', () => {
     ]);
   });
 
+  test('reports frontmatter that does not start on the first line', () => {
+    const problems = fixture({ 'souls/by-use-case/helper.md': `# Helper\n\n${GOOD_USE_CASE}` });
+    assert.deepEqual(problems, [
+      'souls/by-use-case/helper.md: missing YAML frontmatter between two --- lines at the top of the file',
+    ]);
+  });
+
   test('reports a frontmatter field that is present with an empty value', () => {
     const problems = fixture({
       'souls/by-use-case/helper.md': GOOD_USE_CASE.replace('name: helper', 'name:'),
@@ -312,6 +319,28 @@ describe('command line', () => {
     const { status, stderr } = run(['--bogus']);
     assert.equal(status, 2);
     assert.match(stderr, /^Unknown argument: --bogus\nUsage: /);
+  });
+
+  for (const args of [['--root'], ['--root', '--help'], ['--root', '-h']]) {
+    test(`${args.join(' ')} reports the missing directory and exits 2`, () => {
+      const { status, stdout, stderr } = run(args);
+      assert.equal(status, 2);
+      assert.match(stderr, /^Missing directory after --root\nUsage: /);
+      assert.equal(stdout, '');
+    });
+  }
+
+  test('exits 0 when there are no problems', () => {
+    const { status, stdout } = run([]);
+    assert.equal(status, 0, stdout);
+    assert.match(stdout, /: 0 problems\.\n$/);
+  });
+
+  test('prints each problem and exits 1 when problems are found', () => {
+    const { status, stdout } = run(['--root', elsewhere]);
+    assert.equal(status, 1);
+    assert.ok(stdout.startsWith('CONTRIBUTING.md: file not found\n'), stdout);
+    assert.match(stdout, /: 1 problem\.\n$/);
   });
 
   test('names the root relative to the working directory when it is inside it', () => {
