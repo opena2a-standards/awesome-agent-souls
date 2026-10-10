@@ -1053,6 +1053,62 @@ describe('command line', () => {
     }
   });
 
+  test('prints blank and invisible characters in a file name as escapes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-blank-'));
+    try {
+      mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+      writeFileSync(join(root, 'README.md'), '');
+      // A no-break space, an ideographic space, three Hangul fillers, the Braille blank and a variation
+      // selector inside and outside the Basic Multilingual Plane. The ordinary space stays as it is.
+      const name = 'a\xa0b\u{3000}c\u{115f}d\u{1160}e\u{3164}f\u{2800}g\u{fe0f}h\u{e0100}i j.md';
+      writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
+      const { status, stdout } = run(['--root', root], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/a\\xa0b\\u{3000}c\\u{115f}d\\u{1160}e\\u{3164}f\\u{2800}g\\u{fe0f}h\\u{e0100}i j.md: ' +
+          'missing YAML frontmatter between two --- lines at the top of the file',
+        `Checked 1 file in ${root} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test(
+    'prints a backslash in a file or root name as \\\\, unlike the escape of a format character',
+    { skip: process.platform === 'win32' ? 'Windows file names cannot contain a backslash' : false },
+    () => {
+      const root = mkdtempSync(join(tmpdir(), 'check-souls-back\\slash-'));
+      try {
+        mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+        writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+        writeFileSync(join(root, 'README.md'), '');
+        // The text \u{202e}, and a right-to-left override.
+        writeFileSync(join(root, 'souls', 'by-use-case', 'a\\u{202e}b.md'), '## Identity\n');
+        writeFileSync(join(root, 'souls', 'by-use-case', 'a\u{202e}b.md'), '## Identity\n');
+        const { status, stdout } = run(['--root', root], elsewhere);
+        assert.equal(status, 1);
+        assert.deepEqual(stdout.split('\n'), [
+          'souls/by-use-case/a\\\\u{202e}b.md: missing YAML frontmatter between two --- lines at the top of the file',
+          'souls/by-use-case/a\\u{202e}b.md: missing YAML frontmatter between two --- lines at the top of the file',
+          `Checked 2 files in ${root.replace('back\\slash', 'back\\\\slash')} against 1 rule from CONTRIBUTING.md: ` +
+            '2 problems.',
+          '',
+        ]);
+        const missing = join(root, 'no\\such');
+        assert.deepEqual(run(['--root', missing], elsewhere).stdout.split('\n'), [
+          `${missing.replaceAll('\\', '\\\\')}: directory not found`,
+          `Checked 0 files in ${missing.replaceAll('\\', '\\\\')} against 0 rules from CONTRIBUTING.md: 1 problem.`,
+          '',
+        ]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
   test(
     'names the root by its absolute path when the working directory has been removed',
     { skip: process.platform === 'win32' ? 'Windows does not remove a directory that is in use' : false },
@@ -1112,10 +1168,12 @@ function docTexts() {
 }
 
 // Returns `<file>:<line>: <text>` for each line of a markdown file with an npx command that runs
-// hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked.
+// hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked against
+// the rest of its line, so the check sees the character that follows @latest even when it is a later
+// npx, as in @latest.npx.
 function unpinnedNpxCommands(file, text) {
   return text.split('\n').flatMap((line, index) => {
-    const commands = line.split(/\bnpx\b/).slice(1);
+    const commands = [...line.matchAll(/\bnpx\b/g)].map((match) => line.slice(match.index + 'npx'.length));
     const unpinned = commands.some((command) => NPX_PACKAGE.test(command) && !NPX_PINNED.test(command));
     return unpinned ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
@@ -1139,6 +1197,7 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       '(npx --yes opena2a-cli@latest) guard verify',
       'Run npx --yes hackmyagent@latest, then read the report.',
       "HACKMYAGENT='npx --yes hackmyagent@latest'",
+      'npx --yes hackmyagent@latest.npx secure .',
     ].join('\n');
     assert.deepEqual(unpinnedNpxCommands('a.md', text), [
       'a.md:6: npx hackmyagent secure .',
@@ -1151,6 +1210,7 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       'a.md:13: (npx --yes opena2a-cli@latest) guard verify',
       'a.md:14: Run npx --yes hackmyagent@latest, then read the report.',
       "a.md:15: HACKMYAGENT='npx --yes hackmyagent@latest'",
+      'a.md:16: npx --yes hackmyagent@latest.npx secure .',
     ]);
   });
 
@@ -1386,12 +1446,15 @@ describe('guardProblems', () => {
   const verify = ['guard', 'verify'];
 
   // Signs the files named after --files and nothing else, like opena2a-cli. verify exits 1 when nothing
-  // is signed or a signed file has changed, unless verifyPasses is set.
-  function guardStub(name, { verifyPasses = false } = {}) {
+  // is signed or a signed file has changed, unless verifyPasses is set. With needsTelemetryOff set, every
+  // command exits 1 and does nothing unless OPENA2A_TELEMETRY is off.
+  function guardStub(name, { verifyPasses = false, needsTelemetryOff = false } = {}) {
     const path = join(dir, `${name}.mjs`);
     const source = [
       "import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';",
       `const verifyPasses = ${verifyPasses};`,
+      `const needsTelemetryOff = ${needsTelemetryOff};`,
+      "if (needsTelemetryOff && process.env.OPENA2A_TELEMETRY !== 'off') process.exit(1);",
       'const [verb, ...args] = process.argv.slice(3);',
       `const store = ${JSON.stringify(GUARD_STORE)};`,
       "if (verb === 'sign' && args[0] === '--files') {",
@@ -1422,6 +1485,20 @@ describe('guardProblems', () => {
   test('reports a verify command that passes after SOUL.md changed', () => {
     const cli = guardStub('verify-passes', { verifyPasses: true });
     assert.deepEqual(guardProblems(cli, [sign, verify], soul), [`${cli.join(' ')} guard verify exited 0 after SOUL.md changed`]);
+  });
+
+  test('runs each command with opena2a-cli usage telemetry off', () => {
+    const cli = guardStub('telemetry', { needsTelemetryOff: true });
+    // Turned on here, so opena2a-cli sees off only because runGuard sets it, not because the shell
+    // running the tests exported OPENA2A_TELEMETRY=off.
+    const previous = process.env.OPENA2A_TELEMETRY;
+    process.env.OPENA2A_TELEMETRY = 'on';
+    try {
+      assert.deepEqual(guardProblems(cli, [sign, verify], soul), []);
+    } finally {
+      if (previous === undefined) delete process.env.OPENA2A_TELEMETRY;
+      else process.env.OPENA2A_TELEMETRY = previous;
+    }
   });
 
   test('stops a command that does not finish in time and runs no later command', () => {

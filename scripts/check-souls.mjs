@@ -393,17 +393,27 @@ function count(n, noun) {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
-const ESCAPES = { '\t': '\\t', '\n': '\\n', '\r': '\\r' };
+const ESCAPES = { '\\': '\\\\', '\t': '\\t', '\n': '\\n', '\r': '\\r' };
 
 // Writes each control character, format character (such as a right-to-left override or a zero width
-// space) and line or paragraph separator as a visible escape such as \n, \x1b or \u{202e}, so that a
-// file name cannot start an output line of its own or change how the terminal shows the output.
+// space), line or paragraph separator, space other than U+0020 (such as a no-break space), character
+// that is shown as nothing by default (such as a Hangul filler or a variation selector) and the
+// Braille blank as a visible escape such as \n, \x1b, \xa0 or \u{202e}, so that a file name cannot
+// start an output line of its own or change how the terminal shows the output, and a blank in it
+// cannot pass for a space or for nothing. A backslash is written as \\, so a name that holds the text
+// \u{202e} is not written the same way as a name that holds a right-to-left override.
 function printable(text) {
-  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (char) => {
+  return text.replace(/[\\\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u{2800}]|(?! )\p{Zs}/gu, (char) => {
     if (ESCAPES[char]) return ESCAPES[char];
     const code = char.codePointAt(0).toString(16);
     return code.length <= 2 ? `\\x${code.padStart(2, '0')}` : `\\u{${code}}`;
   });
+}
+
+// Writes a path the way printable writes text, except that on Windows, where a backslash separates
+// the parts of a path and cannot be part of a name, each backslash is kept as it is.
+function printablePath(path) {
+  return sep === '\\' ? path.split(sep).map(printable).join(sep) : printable(path);
 }
 
 // The working directory, or null when it has been removed.
@@ -439,12 +449,17 @@ function main(argv) {
   }
   const where = cwd === null ? root : displayRoot(root, cwd);
   const { problems, fileCount, ruleCount } = checkRepository(root, where);
-  for (const problem of problems) console.log(printable(problem));
+  // A problem with the root names it the way the summary line does.
+  for (const problem of problems) {
+    console.log(
+      problem.startsWith(`${where}: `)
+        ? printablePath(where) + printable(problem.slice(where.length))
+        : printable(problem),
+    );
+  }
   console.log(
-    printable(
-      `Checked ${count(fileCount, 'file')} in ${where} against ${count(ruleCount, 'rule')} ` +
-        `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
-    ),
+    `Checked ${count(fileCount, 'file')} in ${printablePath(where)} against ${count(ruleCount, 'rule')} ` +
+      `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
   );
   return problems.length === 0 ? 0 : 1;
 }
