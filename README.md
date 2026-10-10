@@ -503,15 +503,17 @@ Soul files are written in markdown and read by AI agents, which makes them a tar
 Use [HackMyAgent](https://github.com/opena2a-org/hackmyagent) to scan soul files for injection patterns. `hackmyagent secure` scans a directory and reads the soul from the file named `SOUL.md` in it, so run it in the project that holds your `SOUL.md`:
 
 ```bash
-npx hackmyagent secure .
+npx --yes hackmyagent@latest secure .
 ```
+
+`hackmyagent@latest` runs the current release even when an older hackmyagent is installed, and `--yes` lets npx install it without asking.
 
 To scan a soul from this repository, copy it into a directory of its own as `SOUL.md` and scan that directory:
 
 ```bash
 mkdir -p /tmp/soul-scan
 cp souls/by-use-case/personal-assistant.md /tmp/soul-scan/SOUL.md
-npx hackmyagent secure /tmp/soul-scan
+npx --yes hackmyagent@latest secure /tmp/soul-scan
 ```
 
 The injection checks that read `SOUL.md` detect:

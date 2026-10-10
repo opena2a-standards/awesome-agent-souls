@@ -711,3 +711,19 @@ describe('command line', () => {
     assert.ok(!stdout.includes(' files in ..'), stdout);
   });
 });
+
+describe('README.md', () => {
+  // npx runs a hackmyagent that is already installed, even an older release, unless the command
+  // asks for @latest, and without --yes it stops to ask before installing.
+  test('runs the published hackmyagent release in every npx hackmyagent command', () => {
+    const lines = readFileSync(join(repoRoot, 'README.md'), 'utf8').split('\n');
+    const commands = lines
+      .map((line, index) => [index + 1, line])
+      .filter(([, line]) => /\bnpx\b.*\bhackmyagent\b/.test(line));
+    assert.ok(commands.length > 0, 'README.md: no npx hackmyagent command found');
+    const unpinned = commands
+      .filter(([, line]) => !/\bnpx --yes hackmyagent@latest\s/.test(line))
+      .map(([number, line]) => `README.md:${number}: ${line.trim()}`);
+    assert.deepEqual(unpinned, []);
+  });
+});
