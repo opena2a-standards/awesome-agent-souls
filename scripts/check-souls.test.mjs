@@ -1054,6 +1054,39 @@ describe('command line', () => {
   });
 
   test(
+    'prints a backslash in a file or root name as \\\\, unlike the escape of a format character',
+    { skip: process.platform === 'win32' ? 'Windows file names cannot contain a backslash' : false },
+    () => {
+      const root = mkdtempSync(join(tmpdir(), 'check-souls-back\\slash-'));
+      try {
+        mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+        writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+        writeFileSync(join(root, 'README.md'), '');
+        // The text \u{202e}, and a right-to-left override.
+        writeFileSync(join(root, 'souls', 'by-use-case', 'a\\u{202e}b.md'), '## Identity\n');
+        writeFileSync(join(root, 'souls', 'by-use-case', 'a\u{202e}b.md'), '## Identity\n');
+        const { status, stdout } = run(['--root', root], elsewhere);
+        assert.equal(status, 1);
+        assert.deepEqual(stdout.split('\n'), [
+          'souls/by-use-case/a\\\\u{202e}b.md: missing YAML frontmatter between two --- lines at the top of the file',
+          'souls/by-use-case/a\\u{202e}b.md: missing YAML frontmatter between two --- lines at the top of the file',
+          `Checked 2 files in ${root.replace('back\\slash', 'back\\\\slash')} against 1 rule from CONTRIBUTING.md: ` +
+            '2 problems.',
+          '',
+        ]);
+        const missing = join(root, 'no\\such');
+        assert.deepEqual(run(['--root', missing], elsewhere).stdout.split('\n'), [
+          `${missing.replaceAll('\\', '\\\\')}: directory not found`,
+          `Checked 0 files in ${missing.replaceAll('\\', '\\\\')} against 0 rules from CONTRIBUTING.md: 1 problem.`,
+          '',
+        ]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test(
     'names the root by its absolute path when the working directory has been removed',
     { skip: process.platform === 'win32' ? 'Windows does not remove a directory that is in use' : false },
     () => {
