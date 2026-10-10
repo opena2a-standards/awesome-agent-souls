@@ -405,6 +405,9 @@ const ESCAPES = { '\\': '\\\\', '\t': '\\t', '\n': '\\n', '\r': '\\r' };
 // cannot start an output line of its own or change how the terminal shows the output, and none of
 // these characters can pass for a space or for nothing. A backslash is written as \\, so a name that
 // holds the text \u{202e} is not written the same way as a name that holds a right-to-left override.
+// Which code points are unassigned follows the Unicode version of the Node.js build
+// (process.versions.unicode), so a code point assigned in a newer Unicode version is escaped by a
+// Node.js built with an older one, and may be printed as it is by a Node.js built with the newer one.
 function printable(text) {
   return text.replace(/[\\\p{C}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u{2800}\u{1d159}]|(?! )\p{Zs}/gu, (char) => {
     if (ESCAPES[char]) return ESCAPES[char];
@@ -413,10 +416,11 @@ function printable(text) {
   });
 }
 
-// Writes a path the way printable writes text, except that on Windows, where a backslash separates
-// the parts of a path and cannot be part of a name, each backslash is kept as it is.
-function printablePath(path) {
-  return sep === '\\' ? path.split(sep).map(printable).join(sep) : printable(path);
+// Writes a path the way printable writes text, except that where the path separator is a backslash,
+// as on Windows, where a backslash cannot be part of a name, each backslash is kept as it is.
+// `separator` is the separator of this platform unless a test passes another.
+function printablePath(path, separator = sep) {
+  return separator === '\\' ? path.split(separator).map(printable).join(separator) : printable(path);
 }
 
 // The working directory, or null when it has been removed.
@@ -428,7 +432,9 @@ function workingDirectory() {
   }
 }
 
-function main(argv) {
+// Runs the command line `argv` and returns its exit status. Paths are printed with the path separator
+// `separator`, so a test can print them as Windows does on any platform.
+export function main(argv, { separator = sep } = {}) {
   const cwd = workingDirectory();
   let root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   for (let i = 0; i < argv.length; i++) {
@@ -447,7 +453,7 @@ function main(argv) {
       i++;
     } else {
       // An unknown argument is often a directory given without --root, so it is written as a path.
-      console.error(`Unknown argument: ${printablePath(argv[i])}\n${USAGE}`);
+      console.error(`Unknown argument: ${printablePath(argv[i], separator)}\n${USAGE}`);
       return 2;
     }
   }
@@ -457,12 +463,12 @@ function main(argv) {
   for (const problem of problems) {
     console.log(
       problem.startsWith(`${where}: `)
-        ? printablePath(where) + printable(problem.slice(where.length))
+        ? printablePath(where, separator) + printable(problem.slice(where.length))
         : printable(problem),
     );
   }
   console.log(
-    `Checked ${count(fileCount, 'file')} in ${printablePath(where)} against ${count(ruleCount, 'rule')} ` +
+    `Checked ${count(fileCount, 'file')} in ${printablePath(where, separator)} against ${count(ruleCount, 'rule')} ` +
       `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
   );
   return problems.length === 0 ? 0 : 1;
