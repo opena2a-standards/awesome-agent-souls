@@ -1423,12 +1423,15 @@ describe('guardProblems', () => {
   const verify = ['guard', 'verify'];
 
   // Signs the files named after --files and nothing else, like opena2a-cli. verify exits 1 when nothing
-  // is signed or a signed file has changed, unless verifyPasses is set.
-  function guardStub(name, { verifyPasses = false } = {}) {
+  // is signed or a signed file has changed, unless verifyPasses is set. With needsTelemetryOff set, every
+  // command exits 1 and does nothing unless OPENA2A_TELEMETRY is off.
+  function guardStub(name, { verifyPasses = false, needsTelemetryOff = false } = {}) {
     const path = join(dir, `${name}.mjs`);
     const source = [
       "import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';",
       `const verifyPasses = ${verifyPasses};`,
+      `const needsTelemetryOff = ${needsTelemetryOff};`,
+      "if (needsTelemetryOff && process.env.OPENA2A_TELEMETRY !== 'off') process.exit(1);",
       'const [verb, ...args] = process.argv.slice(3);',
       `const store = ${JSON.stringify(GUARD_STORE)};`,
       "if (verb === 'sign' && args[0] === '--files') {",
@@ -1459,6 +1462,20 @@ describe('guardProblems', () => {
   test('reports a verify command that passes after SOUL.md changed', () => {
     const cli = guardStub('verify-passes', { verifyPasses: true });
     assert.deepEqual(guardProblems(cli, [sign, verify], soul), [`${cli.join(' ')} guard verify exited 0 after SOUL.md changed`]);
+  });
+
+  test('runs each command with opena2a-cli usage telemetry off', () => {
+    const cli = guardStub('telemetry', { needsTelemetryOff: true });
+    // Turned on here, so opena2a-cli sees off only because runGuard sets it, not because the shell
+    // running the tests exported OPENA2A_TELEMETRY=off.
+    const previous = process.env.OPENA2A_TELEMETRY;
+    process.env.OPENA2A_TELEMETRY = 'on';
+    try {
+      assert.deepEqual(guardProblems(cli, [sign, verify], soul), []);
+    } finally {
+      if (previous === undefined) delete process.env.OPENA2A_TELEMETRY;
+      else process.env.OPENA2A_TELEMETRY = previous;
+    }
   });
 
   test('stops a command that does not finish in time and runs no later command', () => {
