@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -30,6 +30,21 @@ describe('this repository', () => {
         ? 'the repository now has a CI workflow: describe what it checks in CONTRIBUTING.md'
         : 'the repository has no CI workflow: CONTRIBUTING.md must say so',
     );
+  });
+
+  test('every template refuses role-play, a critical control of hackmyagent scan-soul', () => {
+    const guide = readFileSync(join(repoRoot, 'guides', 'creating-your-first-soul.md'), 'utf8');
+    const minimal = guide.match(/## Minimal Template\s+```markdown\n([\s\S]*?)\n```/);
+    assert.ok(minimal, 'guides/creating-your-first-soul.md: Minimal Template block not found');
+    const templates = readdirSync(join(repoRoot, 'templates'))
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => [`templates/${name}`, readFileSync(join(repoRoot, 'templates', name), 'utf8')]);
+    assert.ok(templates.length > 0, 'no templates were found');
+    for (const [file, text] of [...templates, ['the Minimal Template in the guide', minimal[1]]]) {
+      for (const term of [/\brole-play\b/i, /\bjailbreak\b/i, /\bact as\b/i]) {
+        assert.match(text, term, `${file} lacks the role-play refusal line (${term})`);
+      }
+    }
   });
 });
 
@@ -337,6 +352,31 @@ describe('command line', () => {
   });
 
   test('prints each problem and exits 1 when problems are found', () => {
+    const broken = mkdtempSync(join(tmpdir(), 'check-souls-broken-'));
+    try {
+      const soul = 'souls/by-use-case/helper.md';
+      mkdirSync(join(broken, dirname(soul)), { recursive: true });
+      writeFileSync(join(broken, 'CONTRIBUTING.md'), GUIDE);
+      writeFileSync(join(broken, 'README.md'), BASE_README);
+      writeFileSync(
+        join(broken, soul),
+        GOOD_USE_CASE.replace('name: helper\n', '').replace('## Harm Avoidance\n', ''),
+      );
+      const { status, stdout } = run(['--root', broken]);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/helper.md: missing frontmatter field `name`',
+        'souls/by-use-case/helper.md: missing section ## Harm Avoidance',
+        'CONTRIBUTING.md: no file matches `souls/by-fleet/<fleet>/<name>-agent.md` (By Fleet, member)',
+        `Checked 1 files in ${broken} against 2 rules from CONTRIBUTING.md: 3 problems.`,
+        '',
+      ]);
+    } finally {
+      rmSync(broken, { recursive: true, force: true });
+    }
+  });
+
+  test('reports a directory without CONTRIBUTING.md and exits 1', () => {
     const { status, stdout } = run(['--root', elsewhere]);
     assert.equal(status, 1);
     assert.ok(stdout.startsWith('CONTRIBUTING.md: file not found\n'), stdout);
