@@ -518,8 +518,11 @@ describe('command line', () => {
   test('reports a directory without CONTRIBUTING.md and exits 1', () => {
     const { status, stdout } = run(['--root', elsewhere]);
     assert.equal(status, 1);
-    assert.ok(stdout.startsWith('CONTRIBUTING.md: file not found\n'), stdout);
-    assert.match(stdout, /: 1 problem\.\n$/);
+    assert.deepEqual(stdout.split('\n'), [
+      'CONTRIBUTING.md: file not found',
+      `Checked 0 files in ${elsewhere} against 0 rules from CONTRIBUTING.md: 1 problem.`,
+      '',
+    ]);
   });
 
   test('names the root relative to the working directory when it is inside it', () => {
