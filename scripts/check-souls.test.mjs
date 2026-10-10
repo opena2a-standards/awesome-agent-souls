@@ -1041,7 +1041,9 @@ describe('command line', () => {
 // npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
 // command asks for @latest, and without --yes it stops to ask before installing. A period after @latest
 // ends the sentence unless a word character follows it, as in @latest.1, which names another release.
-const NPX_PACKAGE = /\b(?:hackmyagent|opena2a-cli)\b/;
+// An npx command runs the package named by its first word that is not an option, so prose such as
+// "npx downloads hackmyagent" names the package without running it.
+const NPX_PACKAGE = /^\s+(?:-\S*\s+)*(?:hackmyagent|opena2a-cli)\b/;
 const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?![\w-]|\.\w)/;
 
 // The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
@@ -1094,6 +1096,19 @@ describe('npx commands in README.md and the guides', () => {
       'a.md:9: npx --yes hackmyagent@latest.1 secure .',
       'a.md:10: npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
       'a.md:11: git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
+    ]);
+  });
+
+  test('a line that mentions npx and later names a package is not a command', () => {
+    const text = [
+      'On first use npx downloads hackmyagent, which can take a minute.',
+      'With npx, opena2a-cli runs without a global install.',
+      'npx -y hackmyagent secure .',
+      'Run `npx --yes --quiet hackmyagent@latest secure .` from the project root.',
+    ].join('\n');
+    assert.deepEqual(unpinnedNpxCommands('a.md', text), [
+      'a.md:3: npx -y hackmyagent secure .',
+      'a.md:4: Run `npx --yes --quiet hackmyagent@latest secure .` from the project root.',
     ]);
   });
 
