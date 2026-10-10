@@ -1053,6 +1053,29 @@ describe('command line', () => {
     }
   });
 
+  test('prints blank and invisible characters in a file name as escapes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-blank-'));
+    try {
+      mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+      writeFileSync(join(root, 'README.md'), '');
+      // A no-break space, an ideographic space, three Hangul fillers, the Braille blank and a variation
+      // selector inside and outside the Basic Multilingual Plane. The ordinary space stays as it is.
+      const name = 'a\xa0b\u{3000}c\u{115f}d\u{1160}e\u{3164}f\u{2800}g\u{fe0f}h\u{e0100}i j.md';
+      writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
+      const { status, stdout } = run(['--root', root], elsewhere);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/a\\xa0b\\u{3000}c\\u{115f}d\\u{1160}e\\u{3164}f\\u{2800}g\\u{fe0f}h\\u{e0100}i j.md: ' +
+          'missing YAML frontmatter between two --- lines at the top of the file',
+        `Checked 1 file in ${root} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test(
     'prints a backslash in a file or root name as \\\\, unlike the escape of a format character',
     { skip: process.platform === 'win32' ? 'Windows file names cannot contain a backslash' : false },

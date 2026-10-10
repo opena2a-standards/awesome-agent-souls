@@ -396,12 +396,14 @@ function count(n, noun) {
 const ESCAPES = { '\\': '\\\\', '\t': '\\t', '\n': '\\n', '\r': '\\r' };
 
 // Writes each control character, format character (such as a right-to-left override or a zero width
-// space) and line or paragraph separator as a visible escape such as \n, \x1b or \u{202e}, so that a
-// file name cannot start an output line of its own or change how the terminal shows the output. A
-// backslash is written as \\, so a name that holds the text \u{202e} is not written the same way as
-// a name that holds a right-to-left override.
+// space), line or paragraph separator, space other than U+0020 (such as a no-break space), character
+// that is shown as nothing by default (such as a Hangul filler or a variation selector) and the
+// Braille blank as a visible escape such as \n, \x1b, \xa0 or \u{202e}, so that a file name cannot
+// start an output line of its own or change how the terminal shows the output, and a blank in it
+// cannot pass for a space or for nothing. A backslash is written as \\, so a name that holds the text
+// \u{202e} is not written the same way as a name that holds a right-to-left override.
 function printable(text) {
-  return text.replace(/[\\\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (char) => {
+  return text.replace(/[\\\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u{2800}]|(?! )\p{Zs}/gu, (char) => {
     if (ESCAPES[char]) return ESCAPES[char];
     const code = char.codePointAt(0).toString(16);
     return code.length <= 2 ? `\\x${code.padStart(2, '0')}` : `\\u{${code}}`;
