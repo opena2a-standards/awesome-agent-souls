@@ -803,6 +803,19 @@ describe('readRules and readSections', () => {
     assert.equal(rule.match('souls/crew<>/x.md'), null);
   });
 
+  test('matches a location with many placeholders quickly, without a table of positions for each one', () => {
+    // A table with a row per placeholder and a column per character took about 112 ms and 26 MB for
+    // each 255-character name matched against 100,000 placeholders.
+    const [many] = readRules(`${TABLE_HEADER}| Odd | \`souls/${'<a>'.repeat(100_000)}\` | | |\n`);
+    const [long] = readRules(`${TABLE_HEADER}| Odd | \`souls/<first>${'<a>'.repeat(4_999)}.md\` | | |\n`);
+    const start = performance.now();
+    for (let i = 0; i < 20; i++) assert.equal(many.match(`souls/${String(i).padEnd(255, 'x')}`), null);
+    assert.deepEqual(long.match(`souls/${'x'.repeat(20_000)}.md`), { first: 'x'.repeat(15_001), a: 'x' });
+    assert.equal(long.match(`souls/${'x'.repeat(4_999)}.md`), null);
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 1000, `matched in ${Math.round(elapsed)} ms`);
+  });
+
   test('reads level-2 headings only', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',

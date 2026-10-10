@@ -64,34 +64,36 @@ function splitPattern(pattern) {
 // Matches one path segment, which contains no `/`, and returns [name, text] for each placeholder,
 // or null. A placeholder stands for one or more characters. Where placeholders could divide the
 // text in more than one way, as `<a><b>` can, each one takes the most text that still lets the rest
-// match. `fits[j][p]` says whether the text from position p on can match placeholder j and
-// everything after it, so the segment is matched without trying each way of dividing the text.
+// match. `ends[j]` is the furthest position placeholder j can end at with the rest of the text
+// matching what follows it, so placeholder j and everything after it can match the text from
+// position p on exactly when p < ends[j]. Working from the last placeholder back, each end is found
+// by searching backwards for the literal that follows the placeholder, so the segment is matched
+// without trying each way of dividing the text and without a table of positions per placeholder.
 function matchSegment({ literals, names }, text) {
   const n = text.length;
   const k = names.length;
   if (k === 0) return text === literals[0] ? [] : null;
+  // Each placeholder takes at least one character, so a shorter text cannot match.
+  if (n < literals.reduce((sum, literal) => sum + literal.length, k)) return null;
   if (!text.startsWith(literals[0])) return null;
-  const fits = Array.from({ length: k + 1 }, () => new Uint8Array(n + 1));
-  fits[k][n] = 1;
-  // Whether placeholder j can end at position `end`: the literal after it starts there, and the
-  // rest of the text matches what follows that literal.
-  const canEnd = (j, end) =>
-    text.startsWith(literals[j + 1], end) && fits[j + 1][end + literals[j + 1].length] === 1;
-  for (let j = k - 1; j >= 0; j--) {
-    let any = false;
-    for (let end = n; end > 0; end--) {
-      any ||= canEnd(j, end);
-      fits[j][end - 1] = any ? 1 : 0;
-    }
+  // 0 marks a placeholder that cannot end anywhere, since each one ends after at least one character.
+  const ends = new Array(k).fill(0);
+  // The last placeholder ends where the last literal starts, and that literal ends the text.
+  const last = literals[k];
+  ends[k - 1] = text.endsWith(last) ? n - last.length : 0;
+  for (let j = k - 2; j >= 0 && ends[j + 1] > 0; j--) {
+    // Placeholder j can end where the literal after it starts, if that literal ends before
+    // ends[j + 1], so that placeholder j + 1 still has a character to take.
+    const literal = literals[j + 1];
+    const latest = ends[j + 1] - literal.length - 1;
+    ends[j] = latest > 0 ? Math.max(text.lastIndexOf(literal, latest), 0) : 0;
   }
   let start = literals[0].length;
-  if (fits[0][start] !== 1) return null;
+  if (start >= ends[0]) return null;
   const values = [];
   for (let j = 0; j < k; j++) {
-    let end = n;
-    while (!canEnd(j, end)) end--;
-    values.push([names[j], text.slice(start, end)]);
-    start = end + literals[j + 1].length;
+    values.push([names[j], text.slice(start, ends[j])]);
+    start = ends[j] + literals[j + 1].length;
   }
   return values;
 }
