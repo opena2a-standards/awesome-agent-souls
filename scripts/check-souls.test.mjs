@@ -1112,10 +1112,12 @@ function docTexts() {
 }
 
 // Returns `<file>:<line>: <text>` for each line of a markdown file with an npx command that runs
-// hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked.
+// hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked against
+// the rest of its line, so the check sees the character that follows @latest even when it is a later
+// npx, as in @latest.npx.
 function unpinnedNpxCommands(file, text) {
   return text.split('\n').flatMap((line, index) => {
-    const commands = line.split(/\bnpx\b/).slice(1);
+    const commands = [...line.matchAll(/\bnpx\b/g)].map((match) => line.slice(match.index + 'npx'.length));
     const unpinned = commands.some((command) => NPX_PACKAGE.test(command) && !NPX_PINNED.test(command));
     return unpinned ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
@@ -1139,6 +1141,7 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       '(npx --yes opena2a-cli@latest) guard verify',
       'Run npx --yes hackmyagent@latest, then read the report.',
       "HACKMYAGENT='npx --yes hackmyagent@latest'",
+      'npx --yes hackmyagent@latest.npx secure .',
     ].join('\n');
     assert.deepEqual(unpinnedNpxCommands('a.md', text), [
       'a.md:6: npx hackmyagent secure .',
@@ -1151,6 +1154,7 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       'a.md:13: (npx --yes opena2a-cli@latest) guard verify',
       'a.md:14: Run npx --yes hackmyagent@latest, then read the report.',
       "a.md:15: HACKMYAGENT='npx --yes hackmyagent@latest'",
+      'a.md:16: npx --yes hackmyagent@latest.npx secure .',
     ]);
   });
 
