@@ -338,6 +338,16 @@ describe('checkRepository', () => {
     assert.deepEqual(fixture({}), []);
   });
 
+  test('reports a root that does not exist by the name it is given', () => {
+    const missing = join(tmpdir(), 'check-souls-no-such-dir');
+    assert.deepEqual(checkRepository(missing, 'no-such-dir'), {
+      problems: ['no-such-dir: directory not found'],
+      fileCount: 0,
+      ruleCount: 0,
+    });
+    assert.deepEqual(checkRepository(missing).problems, [`${missing}: directory not found`]);
+  });
+
   test('reports a guide without the requirements table', () => {
     const problems = fixture({ 'CONTRIBUTING.md': '# Guide\n\nNo table here.\n' });
     assert.equal(problems.length, 1);
@@ -628,6 +638,30 @@ describe('command line', () => {
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+
+  test('reports a --root directory that does not exist and exits 1', () => {
+    const { status, stdout } = run(['--root', 'no-such-dir'], elsewhere);
+    assert.equal(status, 1);
+    assert.deepEqual(stdout.split('\n'), [
+      'no-such-dir: directory not found',
+      'Checked 0 files in no-such-dir against 0 rules from CONTRIBUTING.md: 1 problem.',
+      '',
+    ]);
+  });
+
+  test('reports a --root that is a file and exits 1', () => {
+    const { status, stdout } = run(['--root', 'README.md']);
+    assert.equal(status, 1);
+    assert.deepEqual(stdout.split('\n'), [
+      'README.md: not a directory',
+      'Checked 0 files in README.md against 0 rules from CONTRIBUTING.md: 1 problem.',
+      '',
+    ]);
+  });
+
+  test('help states the exit status for a --root directory that does not exist', () => {
+    assert.match(run(['--help']).stdout, /1 problems found, including a --root\s+directory that does not exist/);
   });
 
   test('names the root relative to the working directory when it is inside it', () => {

@@ -10,7 +10,7 @@
 // It also checks README.md: every soul is linked, and every template has a
 // table row whose last cell lists the template's `##` sections in file order.
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -131,8 +131,14 @@ function listMarkdownFiles(root, dir) {
   return files.sort();
 }
 
-export function checkRepository(root) {
+// `name` is how a problem with the root itself names it, for example as typed after --root.
+export function checkRepository(root, name = root) {
   const problems = [];
+  const stats = statSync(root, { throwIfNoEntry: false });
+  if (!stats?.isDirectory()) {
+    const problem = stats ? 'not a directory' : 'directory not found';
+    return { problems: [`${name}: ${problem}`], fileCount: 0, ruleCount: 0 };
+  }
   const guidePath = join(root, GUIDE);
   if (!existsSync(guidePath)) {
     return { problems: [`${GUIDE}: file not found`], fileCount: 0, ruleCount: 0 };
@@ -247,8 +253,9 @@ Options:
                 starts with -, write it as ./-name
   -h, --help    Show this help
 
-Exit status: 0 no problems, 1 problems found, 2 unknown argument or
---root without a directory.`;
+Exit status: 0 no problems; 1 problems found, including a --root
+directory that does not exist; 2 unknown argument or --root without a
+directory.`;
 
 function displayRoot(root, cwd) {
   const fromCwd = relative(cwd, root);
@@ -280,9 +287,9 @@ function main(argv) {
       return 2;
     }
   }
-  const { problems, fileCount, ruleCount } = checkRepository(root);
-  for (const problem of problems) console.log(problem);
   const where = displayRoot(root, process.cwd());
+  const { problems, fileCount, ruleCount } = checkRepository(root, where);
+  for (const problem of problems) console.log(problem);
   console.log(
     `Checked ${count(fileCount, 'file')} in ${where} against ${count(ruleCount, 'rule')} ` +
       `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
