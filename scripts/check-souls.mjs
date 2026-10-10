@@ -29,24 +29,74 @@ function backticked(text) {
   return [...text.matchAll(/`([^`]+)`/g)].map((match) => match[1]);
 }
 
+// Splits a location into its `/`-separated segments. A segment is its placeholder names and the
+// literal texts around them: `literals` has one more entry than `names`.
+function splitPattern(pattern) {
+  const segments = [{ literals: [''], names: [] }];
+  for (const part of pattern.split(/(<[^>]+>)/)) {
+    const segment = segments.at(-1);
+    const placeholder = part.match(/^<([^>]+)>$/);
+    if (placeholder) {
+      segment.names.push(placeholder[1]);
+      segment.literals.push('');
+      continue;
+    }
+    const [first, ...rest] = part.split('/');
+    segment.literals[segment.literals.length - 1] += first;
+    for (const literal of rest) segments.push({ literals: [literal], names: [] });
+  }
+  return segments;
+}
+
+// Matches one path segment, which contains no `/`, and returns [name, text] for each placeholder,
+// or null. A placeholder stands for one or more characters. Where placeholders could divide the
+// text in more than one way, as `<a><b>` can, each one takes the most text that still lets the rest
+// match. `fits[j][p]` says whether the text from position p on can match placeholder j and
+// everything after it, so the segment is matched without trying each way of dividing the text.
+function matchSegment({ literals, names }, text) {
+  const n = text.length;
+  const k = names.length;
+  if (k === 0) return text === literals[0] ? [] : null;
+  if (!text.startsWith(literals[0])) return null;
+  const fits = Array.from({ length: k + 1 }, () => new Uint8Array(n + 1));
+  fits[k][n] = 1;
+  // Whether placeholder j can end at position `end`: the literal after it starts there, and the
+  // rest of the text matches what follows that literal.
+  const canEnd = (j, end) =>
+    text.startsWith(literals[j + 1], end) && fits[j + 1][end + literals[j + 1].length] === 1;
+  for (let j = k - 1; j >= 0; j--) {
+    let any = false;
+    for (let end = n; end > 0; end--) {
+      any ||= canEnd(j, end);
+      fits[j][end - 1] = any ? 1 : 0;
+    }
+  }
+  let start = literals[0].length;
+  if (fits[0][start] !== 1) return null;
+  const values = [];
+  for (let j = 0; j < k; j++) {
+    let end = n;
+    while (!canEnd(j, end)) end--;
+    values.push([names[j], text.slice(start, end)]);
+    start = end + literals[j + 1].length;
+  }
+  return values;
+}
+
+// Returns a function that matches a path against a location such as `souls/by-fleet/<fleet>/<name>.md`
+// and returns the text of each placeholder by name, or null. A placeholder does not match `/`.
 function patternToMatcher(pattern) {
-  const placeholders = [];
-  const source = pattern
-    .split(/(<[^>]+>)/)
-    .map((part) => {
-      const placeholder = part.match(/^<([^>]+)>$/);
-      if (placeholder) {
-        placeholders.push(placeholder[1]);
-        return '([^/]+)';
-      }
-      return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    })
-    .join('');
-  const regex = new RegExp(`^${source}$`);
+  const segments = splitPattern(pattern);
   return (path) => {
-    const match = path.match(regex);
-    if (!match) return null;
-    return Object.fromEntries(placeholders.map((name, index) => [name, match[index + 1]]));
+    const parts = path.split('/');
+    if (parts.length !== segments.length) return null;
+    const values = [];
+    for (const [index, part] of parts.entries()) {
+      const matched = matchSegment(segments[index], part);
+      if (!matched) return null;
+      values.push(...matched);
+    }
+    return Object.fromEntries(values);
   };
 }
 
@@ -330,7 +380,28 @@ function count(n, noun) {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
+const ESCAPES = { '\t': '\\t', '\n': '\\n', '\r': '\\r' };
+
+// Writes each control character as a visible escape such as \n or \x1b, so that a file name cannot
+// start an output line of its own or change how the terminal shows the output.
+function printable(text) {
+  return text.replace(
+    /[\x00-\x1f\x7f-\x9f]/g,
+    (char) => ESCAPES[char] ?? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`,
+  );
+}
+
+// The working directory, or null when it has been removed.
+function workingDirectory() {
+  try {
+    return process.cwd();
+  } catch {
+    return null;
+  }
+}
+
 function main(argv) {
+  const cwd = workingDirectory();
   let root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--help' || argv[i] === '-h') {
@@ -343,19 +414,22 @@ function main(argv) {
         console.error(`Missing directory after --root\n${USAGE}`);
         return 2;
       }
-      root = resolve(value);
+      // Without a working directory a relative path cannot be made absolute, so it is kept as given.
+      root = cwd === null && !isAbsolute(value) ? value : resolve(value);
       i++;
     } else {
-      console.error(`Unknown argument: ${argv[i]}\n${USAGE}`);
+      console.error(printable(`Unknown argument: ${argv[i]}`) + `\n${USAGE}`);
       return 2;
     }
   }
-  const where = displayRoot(root, process.cwd());
+  const where = cwd === null ? root : displayRoot(root, cwd);
   const { problems, fileCount, ruleCount } = checkRepository(root, where);
-  for (const problem of problems) console.log(problem);
+  for (const problem of problems) console.log(printable(problem));
   console.log(
-    `Checked ${count(fileCount, 'file')} in ${where} against ${count(ruleCount, 'rule')} ` +
-      `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
+    printable(
+      `Checked ${count(fileCount, 'file')} in ${where} against ${count(ruleCount, 'rule')} ` +
+        `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
+    ),
   );
   return problems.length === 0 ? 0 : 1;
 }

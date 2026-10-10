@@ -343,6 +343,9 @@ const GUIDE = `# Guide
 | By Fleet, member | \`souls/by-fleet/<fleet>/<name>-agent.md\` | \`name\`, \`fleet: <fleet>\` | \`Identity\`, \`Boundaries\` or \`Constraints\` |
 `;
 
+// The guide up to and including the table's separator row.
+const TABLE_HEADER = GUIDE.split('| By Use Case |')[0];
+
 const GOOD_USE_CASE = `---
 name: helper
 category: use-case
@@ -483,6 +486,22 @@ describe('checkRepository', () => {
     ]);
   });
 
+  test(
+    'reports a rule no file meets when its files could not be in the directory that cannot be read',
+    { skip: CANNOT_DENY_READ },
+    () => {
+      assert.deepEqual(fixture({ 'CONTRIBUTING.md': GUIDE_WITH_TEMPLATE }, { unreadable: ['souls'] }), [
+        'souls: cannot read: permission denied (EACCES)',
+        'CONTRIBUTING.md: no file matches `templates/<name>.md` (Template)',
+      ]);
+      const noFleetMember = { 'souls/by-fleet/crew/lead-agent.md': null };
+      assert.deepEqual(fixture(noFleetMember, { unreadable: ['souls/by-use-case'] }), [
+        'souls/by-use-case: cannot read: permission denied (EACCES)',
+        'CONTRIBUTING.md: no file matches `souls/by-fleet/<fleet>/<name>-agent.md` (By Fleet, member)',
+      ]);
+    },
+  );
+
   test('reports a souls path that is a file', () => {
     const problems = fixture({
       'souls/by-use-case/helper.md': null,
@@ -506,6 +525,13 @@ describe('checkRepository', () => {
   test('reports a README.md that cannot be read once, without a problem for each link', { skip: CANNOT_DENY_READ }, () => {
     const problems = fixture({ 'souls/by-use-case/second.md': GOOD_USE_CASE }, { unreadable: ['README.md'] });
     assert.deepEqual(problems, ['README.md: cannot read: permission denied (EACCES)']);
+  });
+
+  test('reads a README.md that does not exist as empty, so each soul is reported as not linked', () => {
+    assert.deepEqual(fixture({ 'README.md': null }), [
+      'souls/by-fleet/crew/lead-agent.md: not linked from README.md (link the file, or its fleet directory)',
+      'souls/by-use-case/helper.md: not linked from README.md (link the file, or its fleet directory)',
+    ]);
   });
 
   test('reports a guide without the requirements table', () => {
@@ -644,6 +670,50 @@ describe('checkRepository', () => {
     ]);
   });
 
+  // A location with six adjacent placeholders and a directory name of 120 letters, which the location
+  // does not match. Trying each way of dividing the name among the placeholders took about 30 seconds.
+  const ADJACENT = '`souls/<a><b><c><d><e><f>x/<name>.md`';
+  const LONG_DIR = `souls/${'a'.repeat(120)}`;
+
+  function adjacentFixture(options) {
+    return fixture(
+      {
+        'CONTRIBUTING.md': `${TABLE_HEADER}| Odd | ${ADJACENT} | \`name\` | \`Identity\` |\n`,
+        'README.md': '',
+        'souls/by-use-case/helper.md': null,
+        'souls/by-fleet/crew/lead-agent.md': null,
+        [`${LONG_DIR}/x.md`]: '---\nname: x\n---\n\n## Identity\n',
+      },
+      options,
+    );
+  }
+
+  test('matches a location with adjacent placeholders against a long directory name quickly', () => {
+    const start = performance.now();
+    const problems = adjacentFixture();
+    const elapsed = performance.now() - start;
+    assert.deepEqual(problems, [
+      `${LONG_DIR}/x.md: not at any location listed in CONTRIBUTING.md`,
+      `CONTRIBUTING.md: no file matches ${ADJACENT} (Odd)`,
+    ]);
+    assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+  });
+
+  test(
+    'compares a long directory name that cannot be read with adjacent placeholders quickly',
+    { skip: CANNOT_DENY_READ },
+    () => {
+      const start = performance.now();
+      const problems = adjacentFixture({ unreadable: [LONG_DIR] });
+      const elapsed = performance.now() - start;
+      assert.deepEqual(problems, [
+        `${LONG_DIR}: cannot read: permission denied (EACCES)`,
+        `CONTRIBUTING.md: no file matches ${ADJACENT} (Odd)`,
+      ]);
+      assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+    },
+  );
+
   function templateFixture({ readme = BASE_README + TEMPLATE_ROW, template = GOOD_TEMPLATE } = {}) {
     return fixture({
       'CONTRIBUTING.md': GUIDE_WITH_TEMPLATE,
@@ -688,6 +758,14 @@ describe('readRules and readSections', () => {
     assert.deepEqual(fleet.sections, [['Identity'], ['Boundaries', 'Constraints']]);
     assert.deepEqual(fleet.match('souls/by-fleet/crew/lead-agent.md'), { fleet: 'crew', name: 'lead' });
     assert.equal(fleet.match('souls/by-fleet/crew/FLEET.md'), null);
+  });
+
+  test('gives each placeholder the most text that still lets the rest of the location match', () => {
+    const [rule] = readRules(`${TABLE_HEADER}| Odd | \`souls/<a><b>/<name>-agent.md\` | | |\n`);
+    assert.deepEqual(rule.match('souls/xyz/a-agent-agent.md'), { a: 'xy', b: 'z', name: 'a-agent' });
+    assert.equal(rule.match('souls/x/a-agent.md'), null);
+    assert.equal(rule.match('souls/xy/-agent.md'), null);
+    assert.equal(rule.match('souls/x/y/a-agent.md'), null);
   });
 
   test('reads level-2 headings only', () => {
@@ -839,6 +917,18 @@ describe('command line', () => {
     },
   );
 
+  test('reports a --root name that is too long and exits 1', () => {
+    const name = 'a'.repeat(300);
+    const { status, stdout, stderr } = run(['--root', name], elsewhere);
+    assert.equal(status, 1);
+    assert.deepEqual(stdout.split('\n'), [
+      `${name}: cannot read: name too long (ENAMETOOLONG)`,
+      `Checked 0 files in ${name} against 0 rules from CONTRIBUTING.md: 1 problem.`,
+      '',
+    ]);
+    assert.equal(stderr, '');
+  });
+
   test('reports a souls directory that cannot be read and exits 1', { skip: CANNOT_DENY_READ }, () => {
     const denied = mkdtempSync(join(tmpdir(), 'check-souls-denied-'));
     try {
@@ -879,6 +969,58 @@ describe('command line', () => {
     assert.ok(stdout.includes(` files in ${repoRoot} against `), stdout);
     assert.ok(!stdout.includes(' files in ..'), stdout);
   });
+
+  test(
+    'prints control characters in a file name as escapes',
+    { skip: process.platform === 'win32' ? 'Windows file names cannot contain control characters' : false },
+    () => {
+      const root = mkdtempSync(join(tmpdir(), 'check-souls-control-'));
+      try {
+        mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
+        writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+        writeFileSync(join(root, 'README.md'), '');
+        const name = 'a\x1b[31mb\r\t\x7f\x9b\nChecked 0 files: 0 problems.md';
+        writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
+        const { status, stdout } = run(['--root', root], elsewhere);
+        assert.equal(status, 1);
+        assert.deepEqual(stdout.split('\n'), [
+          'souls/by-use-case/a\\x1b[31mb\\r\\t\\x7f\\x9b\\nChecked 0 files: 0 problems.md: ' +
+            'missing YAML frontmatter between two --- lines at the top of the file',
+          `Checked 1 file in ${root} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+          '',
+        ]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test(
+    'names the root by its absolute path when the working directory has been removed',
+    { skip: process.platform === 'win32' ? 'Windows does not remove a directory that is in use' : false },
+    () => {
+      // The shell removes its working directory, then runs the script in it.
+      const runInRemoved = (args) =>
+        spawnSync(
+          '/bin/sh',
+          ['-c', 'mkdir gone && cd gone && rmdir ../gone && exec "$@"', 'sh', process.execPath, script, ...args],
+          { cwd: elsewhere, encoding: 'utf8' },
+        );
+      const found = runInRemoved(['--root', repoRoot]);
+      assert.equal(found.stderr, '');
+      assert.equal(found.status, 0, found.stdout);
+      assert.ok(found.stdout.includes(` files in ${repoRoot} against `), found.stdout);
+      assert.match(found.stdout, /: 0 problems\.\n$/);
+      const missing = runInRemoved(['--root', 'no-such-dir']);
+      assert.equal(missing.stderr, '');
+      assert.equal(missing.status, 1);
+      assert.deepEqual(missing.stdout.split('\n'), [
+        'no-such-dir: directory not found',
+        'Checked 0 files in no-such-dir against 0 rules from CONTRIBUTING.md: 1 problem.',
+        '',
+      ]);
+    },
+  );
 });
 
 // npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
@@ -950,6 +1092,9 @@ describe('this test file', () => {
         { encoding: 'utf8', env: { ...env, TMPDIR: temp, TEMP: temp, TMP: temp } },
       );
       assert.equal(status, 0, stdout);
+      // A pattern that selects no test also passes, as `# pass 1` for the file, so the selected test's
+      // own line is checked too.
+      assert.match(stdout, /^\s*ok \d+ - reports a guide without the requirements table$/m);
       assert.match(stdout, /^# pass 1$/m);
       assert.deepEqual(readdirSync(temp), []);
     } finally {
