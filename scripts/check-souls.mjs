@@ -256,6 +256,10 @@ function displayRoot(root, cwd) {
   return fromCwd.split(sep).join('/') || '.';
 }
 
+function count(n, noun) {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
 function main(argv) {
   let root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   for (let i = 0; i < argv.length; i++) {
@@ -280,8 +284,8 @@ function main(argv) {
   for (const problem of problems) console.log(problem);
   const where = displayRoot(root, process.cwd());
   console.log(
-    `Checked ${fileCount} files in ${where} against ${ruleCount} rules from ${GUIDE}: ` +
-      `${problems.length} problem${problems.length === 1 ? '' : 's'}.`,
+    `Checked ${count(fileCount, 'file')} in ${where} against ${count(ruleCount, 'rule')} ` +
+      `from ${GUIDE}: ${count(problems.length, 'problem')}.`,
   );
   return problems.length === 0 ? 0 : 1;
 }

@@ -368,11 +368,31 @@ describe('command line', () => {
         'souls/by-use-case/helper.md: missing frontmatter field `name`',
         'souls/by-use-case/helper.md: missing section ## Harm Avoidance',
         'CONTRIBUTING.md: no file matches `souls/by-fleet/<fleet>/<name>-agent.md` (By Fleet, member)',
-        `Checked 1 files in ${broken} against 2 rules from CONTRIBUTING.md: 3 problems.`,
+        `Checked 1 file in ${broken} against 2 rules from CONTRIBUTING.md: 3 problems.`,
         '',
       ]);
     } finally {
       rmSync(broken, { recursive: true, force: true });
+    }
+  });
+
+  test('uses the singular for one file, one rule and one problem', () => {
+    const single = mkdtempSync(join(tmpdir(), 'check-souls-single-'));
+    try {
+      const soul = 'souls/by-use-case/helper.md';
+      mkdirSync(join(single, dirname(soul)), { recursive: true });
+      writeFileSync(join(single, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
+      writeFileSync(join(single, 'README.md'), '[helper](souls/by-use-case/helper.md)\n');
+      writeFileSync(join(single, soul), GOOD_USE_CASE.replace('## Harm Avoidance\n', ''));
+      const { status, stdout } = run(['--root', single]);
+      assert.equal(status, 1);
+      assert.deepEqual(stdout.split('\n'), [
+        'souls/by-use-case/helper.md: missing section ## Harm Avoidance',
+        `Checked 1 file in ${single} against 1 rule from CONTRIBUTING.md: 1 problem.`,
+        '',
+      ]);
+    } finally {
+      rmSync(single, { recursive: true, force: true });
     }
   });
 
