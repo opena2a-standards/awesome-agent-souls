@@ -2,10 +2,13 @@
 // Set HACKMYAGENT to a scanner command, for example HACKMYAGENT='npx --yes hackmyagent@latest', to also
 // run hackmyagent scan-soul on every template and the guide's Minimal Template. The command's words are
 // separated by spaces; quote a word that contains spaces, or set HACKMYAGENT to the scanner's path alone.
+// Set OPENA2A_CLI to an opena2a-cli command, for example OPENA2A_CLI='npx --yes opena2a-cli@latest', to also
+// run the guard sign and guard verify commands in README.md and the guides. Its words are read the same way.
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
+  appendFileSync,
   chmodSync,
   existsSync,
   mkdirSync,
@@ -36,6 +39,7 @@ function scannerCommand(value) {
 }
 
 const HACKMYAGENT = scannerCommand(process.env.HACKMYAGENT);
+const OPENA2A_CLI = scannerCommand(process.env.OPENA2A_CLI);
 
 // Returns the spawnSync arguments that run a command's words. On Windows `npx` is npx.cmd, which Node
 // starts only through a shell, so there the words are joined into one cmd.exe command line, with each
@@ -1028,6 +1032,14 @@ describe('command line', () => {
 const NPX_PACKAGE = /\b(?:hackmyagent|opena2a-cli)\b/;
 const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?![\w.-])/;
 
+// Returns [file, text] for README.md and each guide.
+function docTexts() {
+  const guides = readdirSync(join(repoRoot, 'guides'))
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => `guides/${name}`);
+  return ['README.md', ...guides].map((file) => [file, readFileSync(join(repoRoot, file), 'utf8')]);
+}
+
 // Returns `<file>:<line>: <text>` for each line of a markdown file with an npx command that runs
 // hackmyagent or opena2a-cli without `--yes <package>@latest`. Each npx on a line is checked.
 function unpinnedNpxCommands(file, text) {
@@ -1061,10 +1073,7 @@ describe('npx commands in README.md and the guides', () => {
   });
 
   test('every npx hackmyagent and npx opena2a-cli command runs the published release', () => {
-    const guides = readdirSync(join(repoRoot, 'guides'))
-      .filter((name) => name.endsWith('.md'))
-      .map((name) => `guides/${name}`);
-    const texts = ['README.md', ...guides].map((file) => [file, readFileSync(join(repoRoot, file), 'utf8')]);
+    const texts = docTexts();
     assert.deepEqual(texts.flatMap(([file, text]) => unpinnedNpxCommands(file, text)), []);
     for (const name of ['hackmyagent', 'opena2a-cli']) {
       assert.ok(
@@ -1072,6 +1081,227 @@ describe('npx commands in README.md and the guides', () => {
         `no npx ${name} command found in README.md or the guides`,
       );
     }
+  });
+});
+
+// opena2a-cli guard sign reads a word after `sign` as the directory to search for config files, and the
+// search skips SOUL.md, so in a directory holding only SOUL.md, `guard sign SOUL.md` and `guard sign`
+// sign nothing. It signs the files named after --files.
+const GUARD_SIGN = /\bguard sign\b([^`#&\n]*)/g;
+const GUARD_SIGN_FILES = /^ --files\b/;
+
+// Where opena2a-cli guard sign writes its signatures.
+const GUARD_DIR = '.opena2a/guard/';
+const GUARD_STORE = `${GUARD_DIR}signatures.json`;
+
+// Returns `<file>:<line>: <text>` for each line of a markdown file with a `guard sign` command that does
+// not name its files after --files. Each `guard sign` on a line is checked.
+function unnamedGuardSigns(file, text) {
+  return text.split('\n').flatMap((line, index) => {
+    const unnamed = [...line.matchAll(GUARD_SIGN)].some(([, rest]) => !GUARD_SIGN_FILES.test(rest));
+    return unnamed ? [`${file}:${index + 1}: ${line.trim()}`] : [];
+  });
+}
+
+// Returns the words after `npx --yes opena2a-cli@latest` in each distinct guard sign and guard verify
+// command in the texts. A command ends at a backtick, a # comment, && or the end of its line.
+function guardCommands(texts) {
+  const commands = new Map();
+  for (const [, text] of texts) {
+    for (const [, command] of text.matchAll(/npx --yes opena2a-cli@latest (guard (?:sign|verify)\b[^`#&\n]*)/g)) {
+      const words = command.trim().split(/\s+/);
+      commands.set(words.join(' '), words);
+    }
+  }
+  return [...commands.values()];
+}
+
+// Runs `<command> <words>` in `dir` and returns the command line with its exit status, or with `stop`, a
+// problem after which nothing more is run.
+function runGuard(command, words, dir, timeout) {
+  const line = [...command, ...words].join(' ');
+  const [program, args, options] = scannerSpawn([...command, ...words]);
+  const { status, signal, error } = spawnSync(program, args, {
+    ...options,
+    cwd: dir,
+    encoding: 'utf8',
+    timeout,
+    // opena2a-cli sends anonymous usage telemetry unless this is off.
+    env: { ...process.env, OPENA2A_TELEMETRY: 'off' },
+  });
+  if (error?.code === 'ETIMEDOUT') {
+    return { line, stop: `${line} did not finish within ${timeout / 1000} seconds; stopped at this command` };
+  }
+  if (error) return { line, stop: `could not run ${line}: ${error.message}` };
+  return { line, status: status ?? signal };
+}
+
+// Runs each sign command, as `<command> <words>`, in its own temporary directory holding only `soul` as
+// SOUL.md. The sign command must write GUARD_STORE, and each verify command must then pass, and fail once
+// SOUL.md has changed. Returns one line per problem. A command still running after `timeout` milliseconds
+// is stopped, and no later command is run.
+function guardProblems(command, commands, soul, { timeout = SCAN_TIMEOUT_MS } = {}) {
+  const problems = [];
+  const verifies = commands.filter((words) => words[1] === 'verify');
+  for (const sign of commands.filter((words) => words[1] === 'sign')) {
+    const dir = mkdtempSync(join(tmpdir(), 'check-souls-guard-'));
+    try {
+      writeFileSync(join(dir, 'SOUL.md'), soul);
+      const signed = runGuard(command, sign, dir, timeout);
+      if (signed.stop) return [...problems, signed.stop];
+      if (signed.status !== 0) problems.push(`${signed.line} exited ${signed.status}`);
+      if (!existsSync(join(dir, GUARD_STORE))) problems.push(`${signed.line} did not write ${GUARD_STORE}`);
+      for (const verify of verifies) {
+        const result = runGuard(command, verify, dir, timeout);
+        if (result.stop) return [...problems, result.stop];
+        if (result.status !== 0) problems.push(`${result.line} exited ${result.status} after ${sign.join(' ')}`);
+      }
+      appendFileSync(join(dir, 'SOUL.md'), '\nA line added after signing.\n');
+      for (const verify of verifies) {
+        const result = runGuard(command, verify, dir, timeout);
+        if (result.stop) return [...problems, result.stop];
+        if (result.status === 0) problems.push(`${result.line} exited 0 after SOUL.md changed`);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  return problems;
+}
+
+describe('guard commands in README.md and the guides', () => {
+  test('a guard sign command names its files after --files', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
+      'Sign it with `guard sign --files SOUL.md`.',
+      'Sign them with `guard sign --files`, followed by their paths.',
+      'npx --yes opena2a-cli@latest guard sign SOUL.md',
+      'Sign it with `guard sign`.',
+      'git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign SOUL.md',
+      'Run `opena2a guard resign` after an edit.',
+    ].join('\n');
+    assert.deepEqual(unnamedGuardSigns('a.md', text), [
+      'a.md:4: npx --yes opena2a-cli@latest guard sign SOUL.md',
+      'a.md:5: Sign it with `guard sign`.',
+      'a.md:6: git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign SOUL.md',
+    ]);
+  });
+
+  test('reads each distinct guard command, ending it at a comment, && or a backtick', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md    # Integrity signing',
+      'git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign --files SOUL.md',
+      '3. **Run integrity verification:** `npx --yes opena2a-cli@latest guard verify`',
+      '  run: npx --yes opena2a-cli@latest guard verify',
+      'npx --yes hackmyagent@latest secure .',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'sign', '--files', 'SOUL.md'],
+      ['guard', 'verify'],
+    ]);
+  });
+
+  test('every guard sign command names its files, and one signs SOUL.md and one verifies it', () => {
+    const texts = docTexts();
+    assert.deepEqual(texts.flatMap(([file, text]) => unnamedGuardSigns(file, text)), []);
+    const commands = guardCommands(texts);
+    assert.ok(
+      commands.some((words) => words[1] === 'sign' && words.includes('SOUL.md')),
+      'no npx opena2a-cli guard sign --files SOUL.md command found in README.md or the guides',
+    );
+    assert.ok(
+      commands.some((words) => words[1] === 'verify'),
+      'no npx opena2a-cli guard verify command found in README.md or the guides',
+    );
+  });
+
+  test('README.md and the guides name the directory guard sign writes to', () => {
+    const texts = docTexts();
+    const others = texts.flatMap(([file, text]) =>
+      text.split('\n').flatMap((line, index) => (/\.configguard\b/i.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [])),
+    );
+    assert.deepEqual(others, []);
+    assert.ok(
+      texts.some(([, text]) => text.includes(GUARD_STORE)),
+      `README.md and the guides do not name ${GUARD_STORE}`,
+    );
+    const hardening = readFileSync(join(repoRoot, 'guides', 'soul-hardening.md'), 'utf8');
+    const signed = existsSync(join(repoRoot, GUARD_STORE));
+    assert.equal(
+      /not signed/.test(hardening),
+      !signed,
+      signed
+        ? `the repository now has ${GUARD_STORE}: guides/soul-hardening.md must say how to verify its souls`
+        : 'the repository has no signature store: guides/soul-hardening.md must say its souls are not signed',
+    );
+  });
+
+  test(
+    'the guard sign and guard verify commands sign SOUL.md and detect a change to it',
+    { skip: OPENA2A_CLI ? false : "set OPENA2A_CLI='npx --yes opena2a-cli@latest' to run it" },
+    () => {
+      const soul = readFileSync(join(repoRoot, 'templates', 'basic.md'), 'utf8');
+      assert.deepEqual(guardProblems(OPENA2A_CLI, guardCommands(docTexts()), soul), []);
+    },
+  );
+});
+
+describe('guardProblems', () => {
+  let dir;
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'check-souls-guard-stub-'));
+  });
+  after(() => rmSync(dir, { recursive: true, force: true }));
+  const soul = '## Identity\n\nA soul to sign.\n';
+  const sign = ['guard', 'sign', '--files', 'SOUL.md'];
+  const verify = ['guard', 'verify'];
+
+  // Signs the files named after --files and nothing else, like opena2a-cli. verify exits 1 when nothing
+  // is signed or a signed file has changed, unless verifyPasses is set.
+  function guardStub(name, { verifyPasses = false } = {}) {
+    const path = join(dir, `${name}.mjs`);
+    const source = [
+      "import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';",
+      `const verifyPasses = ${verifyPasses};`,
+      'const [verb, ...args] = process.argv.slice(3);',
+      `const store = ${JSON.stringify(GUARD_STORE)};`,
+      "if (verb === 'sign' && args[0] === '--files') {",
+      `  mkdirSync(${JSON.stringify(GUARD_DIR)}, { recursive: true });`,
+      "  writeFileSync(store, JSON.stringify(args.slice(1).map((file) => [file, readFileSync(file, 'utf8')])));",
+      "} else if (verb === 'verify' && !verifyPasses) {",
+      "  const signed = existsSync(store) ? JSON.parse(readFileSync(store, 'utf8')) : [];",
+      "  const changed = signed.some(([file, text]) => readFileSync(file, 'utf8') !== text);",
+      '  process.exitCode = signed.length === 0 || changed ? 1 : 0;',
+      '}',
+    ];
+    writeFileSync(path, `${source.join('\n')}\n`);
+    return [process.execPath, path];
+  }
+
+  test('accepts a sign command that writes the store and a verify command that detects a change', () => {
+    assert.deepEqual(guardProblems(guardStub('honest'), [sign, verify], soul), []);
+  });
+
+  test('reports a sign command that names SOUL.md without --files', () => {
+    const cli = guardStub('without-files');
+    assert.deepEqual(guardProblems(cli, [['guard', 'sign', 'SOUL.md'], verify], soul), [
+      `${cli.join(' ')} guard sign SOUL.md did not write ${GUARD_STORE}`,
+      `${cli.join(' ')} guard verify exited 1 after guard sign SOUL.md`,
+    ]);
+  });
+
+  test('reports a verify command that passes after SOUL.md changed', () => {
+    const cli = guardStub('verify-passes', { verifyPasses: true });
+    assert.deepEqual(guardProblems(cli, [sign, verify], soul), [`${cli.join(' ')} guard verify exited 0 after SOUL.md changed`]);
+  });
+
+  test('stops a command that does not finish in time and runs no later command', () => {
+    const path = join(dir, 'hang.mjs');
+    writeFileSync(path, 'setTimeout(() => {}, 10_000);\n');
+    const cli = [process.execPath, path];
+    assert.deepEqual(guardProblems(cli, [sign, verify], soul, { timeout: 500 }), [
+      `${cli.join(' ')} guard sign --files SOUL.md did not finish within 0.5 seconds; stopped at this command`,
+    ]);
   });
 });
 

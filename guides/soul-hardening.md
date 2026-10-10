@@ -30,7 +30,7 @@ Cryptographically sign your soul file so any modification is detectable.
 
 ```bash
 # Sign after review and approval
-npx --yes opena2a-cli@latest guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign --files SOUL.md
 
 # Verify before every agent session
 npx --yes opena2a-cli@latest guard verify
@@ -83,7 +83,7 @@ Before using a soul file from an external source, verify its origin:
 - Does the OASB benchmark produce a reasonable score?
 - Does the file contain hidden content? (Search for HTML comments, zero-width characters)
 
-If using souls from this repository, check the `.configguard/` signatures to verify the files have not been modified since the maintainers signed them.
+Souls in this repository are not signed: it has no `.opena2a/guard/` signature store. After you review a soul from it, sign your copy with `npx --yes opena2a-cli@latest guard sign --files SOUL.md`, so `guard verify` detects any later change to it.
 
 ---
 
@@ -106,7 +106,7 @@ If you suspect a soul file has been tampered with:
 3. **Run integrity verification:** `npx --yes opena2a-cli@latest guard verify`
 4. **Scan for injection:** `npx --yes hackmyagent@latest secure .` in the directory that holds `SOUL.md`
 5. **Review agent output** from the period of potential compromise.
-6. **Restore from a known-good commit:** `git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign SOUL.md`
+6. **Restore from a known-good commit:** `git checkout <hash> -- SOUL.md && npx --yes opena2a-cli@latest guard sign --files SOUL.md`
 
 ---
 

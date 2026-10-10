@@ -161,7 +161,7 @@ cp -r souls/by-fleet/red-team-ops/ ./fleet/
 Sign your soul file to detect tampering:
 
 ```bash
-npx --yes opena2a-cli@latest guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign --files SOUL.md
 npx --yes opena2a-cli@latest guard verify
 ```
 
@@ -249,7 +249,7 @@ done
 
 This produces a coordinated offensive security team where each agent (recon, exploit, pivot, report) understands PCI-DSS, SOX, and financial system attack surfaces.
 
-After combining, review the merged files to resolve any conflicting instructions and sign them with `guard sign`.
+After combining, review the merged files to resolve any conflicting instructions and sign them with `guard sign --files`, followed by their paths.
 
 ---
 
@@ -429,7 +429,7 @@ Ready-to-use soul files for common project types. Copy one into your project roo
 ```bash
 # Start a new website project with a soul
 cp souls/examples/website-project.md ./SOUL.md
-npx --yes opena2a-cli@latest guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign --files SOUL.md
 ```
 
 ---
@@ -474,10 +474,10 @@ A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could
 **Sign your soul file:**
 
 ```bash
-npx --yes opena2a-cli@latest guard sign SOUL.md
+npx --yes opena2a-cli@latest guard sign --files SOUL.md
 ```
 
-This creates a `.configguard/` directory containing the signature and metadata.
+This writes `.opena2a/guard/signatures.json`, which records the file's SHA-256 hash and when it was signed. Name each file after `--files`: a file name given without it is read as a directory to search, and nothing is signed.
 
 **Verify before each session:**
 
@@ -490,8 +490,8 @@ If the file has been modified since signing, verification fails and the agent sh
 **Recommended workflow:**
 
 1. Write or copy a `SOUL.md` into your project.
-2. Sign it with `guard sign`.
-3. Commit both `SOUL.md` and `.configguard/` to version control.
+2. Sign it with `guard sign --files SOUL.md`.
+3. Commit both `SOUL.md` and `.opena2a/guard/` to version control.
 4. In CI, run `guard verify` before any AI-assisted step.
 
 ---

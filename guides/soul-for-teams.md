@@ -73,7 +73,7 @@ Maintain a dedicated `org-souls` repository. Individual project repositories pul
    ```
 4. **Integrity re-signing.** After merge, re-sign the soul file:
    ```bash
-   npx --yes opena2a-cli@latest guard sign SOUL.md
+   npx --yes opena2a-cli@latest guard sign --files SOUL.md
    ```
 
 ### Who Can Modify Soul Files

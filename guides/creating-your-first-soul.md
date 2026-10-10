@@ -136,12 +136,12 @@ A soul file improves through use. Add boundaries you discover are missing, remov
 After finalizing, harden the file against tampering:
 
 ```bash
-npx --yes opena2a-cli@latest guard sign SOUL.md    # Integrity signing
-npx --yes hackmyagent@latest secure .               # Injection scanning (reads ./SOUL.md)
-npx --yes hackmyagent@latest scan-soul .            # Governance coverage (OASB)
+npx --yes opena2a-cli@latest guard sign --files SOUL.md    # Integrity signing
+npx --yes hackmyagent@latest secure .                       # Injection scanning (reads ./SOUL.md)
+npx --yes hackmyagent@latest scan-soul .                    # Governance coverage (OASB)
 ```
 
-Commit both `SOUL.md` and `.configguard/` to version control.
+Commit both `SOUL.md` and `.opena2a/guard/` to version control.
 
 ---
 
