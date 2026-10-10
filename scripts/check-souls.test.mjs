@@ -228,7 +228,16 @@ describe('scanSoulProblems', () => {
       'telemetry',
       `if (process.env.OPENA2A_TELEMETRY === 'off') process.stdout.write(${JSON.stringify(passing)});\n`,
     );
-    assert.deepEqual(scanSoulProblems(scanner, souls), []);
+    // Turned on here, so the scanner sees off only because scanSoulProblems sets it, not because the
+    // shell running the tests exported OPENA2A_TELEMETRY=off.
+    const previous = process.env.OPENA2A_TELEMETRY;
+    process.env.OPENA2A_TELEMETRY = 'on';
+    try {
+      assert.deepEqual(scanSoulProblems(scanner, souls), []);
+    } finally {
+      if (previous === undefined) delete process.env.OPENA2A_TELEMETRY;
+      else process.env.OPENA2A_TELEMETRY = previous;
+    }
   });
 
   test(
