@@ -1295,8 +1295,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 // sign nothing. It signs the files named after --files.
 // GUARD_SIGN_FILES separates words by spaces and tabs, as the shell does. GUARD_SIGN also separates
 // words by other whitespace, such as a no-break space, so a command whose words are joined by one is
-// still checked.
-const GUARD_SIGN = /\bguard\s+sign\b([^`#&\n]*)/g;
+// still checked, and is reported even when --files follows.
+const GUARD_SIGN = /\bguard(\s+)sign\b([^`#&\n]*)/g;
 const GUARD_SIGN_FILES = /^[ \t]+--files\b/;
 
 // Where opena2a-cli guard sign writes its signatures.
@@ -1304,10 +1304,13 @@ const GUARD_DIR = '.opena2a/guard/';
 const GUARD_STORE = `${GUARD_DIR}signatures.json`;
 
 // Returns `<file>:<line>: <text>` for each line of a markdown file with a `guard sign` command that is not
-// followed by --files. Each `guard sign` on a line is checked. Whether file names follow --files is not.
+// followed by --files, or whose `guard` and `sign` are joined by whitespace other than spaces and tabs.
+// Each `guard sign` on a line is checked. Whether file names follow --files is not.
 function unnamedGuardSigns(file, text) {
   return text.split('\n').flatMap((line, index) => {
-    const unnamed = [...line.matchAll(GUARD_SIGN)].some(([, rest]) => !GUARD_SIGN_FILES.test(rest));
+    const unnamed = [...line.matchAll(GUARD_SIGN)].some(
+      ([, separator, rest]) => !/^[ \t]+$/.test(separator) || !GUARD_SIGN_FILES.test(rest),
+    );
     return unnamed ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
 }
@@ -1417,6 +1420,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       'npx --yes opena2a-cli@latest guard sign\f--files SOUL.md',
       'npx --yes opena2a-cli@latest guard sign\r--files SOUL.md',
       'npx --yes opena2a-cli@latest guard\u{a0}sign SOUL.md',
+      'npx --yes opena2a-cli@latest guard\u{a0}sign --files SOUL.md',
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
     ].join('\n');
     assert.deepEqual(unnamedGuardSigns('a.md', text), [
@@ -1428,6 +1432,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       'a.md:6: npx --yes opena2a-cli@latest guard sign\f--files SOUL.md',
       'a.md:7: npx --yes opena2a-cli@latest guard sign\r--files SOUL.md',
       'a.md:8: npx --yes opena2a-cli@latest guard\u{a0}sign SOUL.md',
+      'a.md:9: npx --yes opena2a-cli@latest guard\u{a0}sign --files SOUL.md',
     ]);
   });
 
