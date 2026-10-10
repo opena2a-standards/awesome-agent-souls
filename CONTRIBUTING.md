@@ -1,6 +1,6 @@
 # Contributing to Awesome Agent Souls
 
-Thank you for your interest in contributing. This guide covers how to submit new soul files, what quality standards we enforce, and how the review process works.
+Thank you for your interest in contributing. This guide covers where a new soul file goes, what it must contain, how to check it before you open a pull request, and how pull requests are handled.
 
 ---
 
@@ -8,6 +8,7 @@ Thank you for your interest in contributing. This guide covers how to submit new
 
 - [Submitting a New Soul](#submitting-a-new-soul)
 - [Soul File Requirements](#soul-file-requirements)
+- [Check Your File](#check-your-file)
 - [Quality Guidelines](#quality-guidelines)
 - [What NOT to Include](#what-not-to-include)
 - [Review Process](#review-process)
@@ -19,62 +20,81 @@ Thank you for your interest in contributing. This guide covers how to submit new
 ## Submitting a New Soul
 
 1. **Fork** this repository.
-2. **Create a branch** with a descriptive name: `add/security/forensic-analyst` or `improve/development/senior-backend`.
-3. **Create a directory** under the appropriate category in `souls/`:
-   ```
-   souls/<category>/<soul-name>/SOUL.md
-   ```
-   Valid categories: `security`, `development`, `devops`, `data-science`, `leadership`, `creative`, `use-case`.
-4. **Write your `SOUL.md`** following the requirements below.
-5. **Open a pull request** against `main` with a clear title (e.g., "Add forensic-analyst soul to security category").
+2. **Create a branch** with a descriptive name: `add/by-role/forensic-analyst` or `improve/by-industry/healthcare-agent`.
+3. **Pick the dimension** your soul belongs to (see [The Five-Dimensional Taxonomy](README.md#the-five-dimensional-taxonomy)) and create the file at the location the [requirements table](#soul-file-requirements) gives for it. The quickest start is to copy the closest existing soul in that dimension, or a file from [`templates/`](templates/), and keep its section layout.
+4. **Write the soul** following the requirements below.
+5. **List it in the README.** Add a row to the table for its dimension in [README.md](README.md). If the section heading carries a count, such as "By Role (25 souls)", update the count there and in the Contents list.
+6. **Run the checks** in [Check Your File](#check-your-file).
+7. **Open a pull request** against `main` with a clear title (e.g., "Add forensic-analyst soul to by-role/security").
 
-If your soul does not fit an existing category, open an issue to discuss adding a new category before submitting your PR.
+If your soul does not fit an existing dimension or By Role area, open an issue to discuss it before submitting your pull request.
 
 ---
 
 ## Soul File Requirements
 
-Every `SOUL.md` must begin with YAML frontmatter containing these required fields:
+Every soul file is markdown: YAML frontmatter between two `---` lines at the top, then `##` sections. The table gives, for each kind of file, where it lives, the frontmatter fields it must carry and the `##` sections it must contain. `scripts/check-souls.mjs` reads its rules from this table, so keep the table's format when you change it.
+
+| Dimension | Location | Required frontmatter | Required sections |
+|-----------|----------|----------------------|-------------------|
+| By Role | `souls/by-role/<area>/<name>.md` | `name`, `role`, `description`, `tools`, `author` | `Identity`, `Core Mission`, `Communication Style`, `Workflow`, `Boundaries`, `Domain Knowledge`, `Tools and Preferences`, `Harm Avoidance` |
+| By Industry | `souls/by-industry/<industry>/<name>-agent.md` | `name`, `role`, `description`, `tools`, `category: industry`, `author` | `Identity`, `Core Mission`, `Communication Style`, `Regulatory Knowledge`, `Domain Patterns`, `Security Requirements`, `Boundaries`, `Tools and Preferences`, `Harm Avoidance` |
+| By Organization Type | `souls/by-org-type/<org-type>/<name>-agent.md` | `name`, `role`, `description`, `tools`, `category: org-type`, `author` | `Identity`, `Core Mission`, `Communication Style`, `Organizational Context`, `Decision Framework`, `Technical Priorities`, `Boundaries`, `Tools and Preferences`, `Harm Avoidance` |
+| By Use Case | `souls/by-use-case/<name>.md` | `name`, `role`, `description`, `tools`, `category: use-case` | `Identity`, `Communication Style`, `Boundaries`, `Harm Avoidance` |
+| By Fleet, team file | `souls/by-fleet/<fleet>/FLEET.md` | `name: <fleet>`, `description`, `team_size`, `coordination` | `Mission`, `Team Composition`, `Coordination Protocol`, `Shared Governance`, `Escalation Path` |
+| By Fleet, member | `souls/by-fleet/<fleet>/<name>-agent.md` | `name`, `role`, `description`, `fleet: <fleet>`, `tools`, `author` | `Identity`, `Boundaries` or `Constraints`, `Harm Avoidance` |
+| Starter example | `souls/examples/<name>.md` | `name`, `role`, `description`, `tools`, `category: example`, `author` | `Identity`, `Boundaries`, `Harm Avoidance` |
+| Template | `templates/<name>.md` | `name`, `role`, `description`, `tools`, `category: template`, `author` | `Identity`, `Communication Style`, `Workflow`, `Boundaries`, `Domain Knowledge`, `Harm Avoidance` |
+
+How to read the table:
+
+- A word in angle brackets is one path segment you choose. For By Role, `<area>` is one of `security`, `development`, `devops`, `data-science`, `leadership` or `creative`.
+- `category: industry` means the field must have exactly that value. `fleet: <fleet>` and `name: <fleet>` mean the value must equal the fleet's directory name.
+- A section is present when the file has a `##` heading with that name, or a `##` heading that starts with the name followed by a space (for example `## Boundaries -- Things You Must Never Do`). Section order is not checked; existing souls put `Identity` first and `Harm Avoidance` last.
+- `Boundaries` or `Constraints`: fleet members carry one of the two. The `incident-response-team`, `red-team-ops` and `soc-defense` fleets use `Core Responsibilities`, `Behavioral Rules` and `Constraints`; the other fleets use `Core Mission`, `Communication Style`, `Workflow`, `Boundaries` and `Handoff Protocol`. Follow the layout of the fleet you are adding to.
+- `Harm Avoidance` covers judgment in gray areas, where an action is technically permitted but may cause unintended harm. See the README introduction for the specification it follows.
+
+### Frontmatter fields
 
 ```yaml
 ---
-name: Forensic Analyst
-role: Digital forensics and evidence analysis specialist
-description: >
-  An agent identity focused on methodical evidence collection,
-  chain-of-custody awareness, and forensic analysis procedures.
-version: "1.0"
+name: forensic-analyst
+role: Digital Forensics Analyst
+description: Use when collecting and analyzing evidence with chain-of-custody awareness and documented forensic procedures.
+tools: [Claude Code, Cursor, Copilot]
 author: your-github-username
-compatible_tools:
-  - Claude Code
-  - Cursor
-  - Copilot
-  - Gemini CLI
-  - OpenClaw
-  - Windsurf
 ---
 ```
 
-### Required frontmatter fields
-
-| Field | Description |
-|-------|-------------|
-| `name` | Human-readable name for the soul identity |
-| `role` | One-line role description |
-| `description` | 1-3 sentence description of what this soul does and when to use it |
-| `version` | Semantic version string (start at "1.0") |
+| Field | What it holds |
+|-------|---------------|
+| `name` | Identifier for the soul. Most souls use the file name without `.md` (for example `appsec-engineer`). |
+| `role` | One-line role title |
+| `description` | One or two sentences on what the soul does and when to use it |
+| `tools` | Inline list of the AI coding tools you have used the soul with. Names in use: `Claude Code`, `Cursor`, `Copilot`, `Gemini CLI`, `OpenClaw`, `Windsurf`. |
 | `author` | Your GitHub username |
-| `compatible_tools` | List of AI coding tools this soul has been tested with |
+| `category` | Dimension label, with the value the table gives |
+| `fleet` | Fleet members only: the fleet's directory name |
+| `team_size` | `FLEET.md` only: the number of agents in the fleet |
+| `coordination` | `FLEET.md` only: `sequential`, `parallel`, `hub-spoke` or `mesh` (see [Coordination Patterns](README.md#coordination-patterns)) |
 
-### Required sections in the body
+Soul files carry no version field. Git history records each change.
 
-The markdown body after the frontmatter should include:
+---
 
-1. **Identity** -- Who the agent is, what role it plays, its core expertise areas.
-2. **Communication Style** -- How the agent communicates (tone, verbosity, formatting preferences).
-3. **Values and Principles** -- What the agent prioritizes in its work (e.g., security over convenience, clarity over brevity).
-4. **Boundaries** -- What the agent will not do, what it refuses, where it defers to humans.
-5. **Working Patterns** -- How the agent approaches tasks (e.g., always writes tests first, always checks for security implications).
+## Check Your File
+
+Nothing runs automatically on pull requests: the repository has no CI workflow. Run these checks yourself before you open a pull request, and say in the pull request description that you ran them.
+
+1. **Structure check.** Requires Node.js; there is nothing to install.
+
+   ```bash
+   node scripts/check-souls.mjs
+   ```
+
+   It checks every `.md` file under `souls/` and `templates/` against the [requirements table](#soul-file-requirements): the file sits at a listed location, carries the required frontmatter fields and sections, and, for files under `souls/`, is linked from README.md directly or through its fleet directory. It prints one line per problem and exits with a non-zero status if it finds any. If you change the script, also run `node --test scripts/check-souls.test.mjs`.
+
+2. **Injection scan.** Scan your file for prompt-injection patterns as described in [Soul Hardening](README.md#soul-hardening).
 
 ---
 
@@ -87,8 +107,8 @@ A strong soul file is **specific, actionable, and distinct**. It should meaningf
 - **Be specific about personality.** "Prefers explicit error handling over silent failures and always suggests the most defensive option" is better than "writes good code."
 - **Define clear boundaries.** "Never suggests disabling security features, even when asked to for debugging purposes" gives the agent a concrete rule.
 - **Include actionable instructions.** "When reviewing code, always check for: hardcoded credentials, SQL injection, missing input validation, and insecure deserialization" tells the agent exactly what to do.
-- **Differentiate from similar souls.** A `penetration-tester` soul should behave noticeably differently from an `appsec-engineer` soul.
-- **Test your soul.** Before submitting, use your soul file with at least one compatible tool and verify it meaningfully shapes agent behavior.
+- **Differentiate from similar souls.** The `penetration-tester` soul should behave noticeably differently from the `appsec-engineer` soul.
+- **Test your soul.** Before submitting, use your soul file with at least one tool listed in its `tools` field and verify it meaningfully shapes agent behavior.
 - **Keep it focused.** A soul should cover one role well rather than trying to be everything.
 
 ### Do not
@@ -109,7 +129,7 @@ The following content is **prohibited** in soul files and will result in PR reje
 | API keys, tokens, passwords, or credentials | Security risk. Credentials must never be committed to a public repository. |
 | Personal data (real names, emails, addresses, phone numbers) | Privacy risk. Use GitHub usernames only. |
 | Instructions to exfiltrate data, bypass safety measures, or execute harmful commands | Safety risk. Soul files shape AI behavior and must not be weaponized. |
-| Prompt injection payloads (hidden instructions, encoded commands, instruction overrides) | Security risk. All submissions are scanned for injection. |
+| Prompt injection payloads (hidden instructions, encoded commands, instruction overrides) | Security risk. Scan your file before you submit it (see [Check Your File](#check-your-file)). |
 | Copyrighted content from other projects without attribution | Legal risk. Attribute sources and respect licenses. |
 | Content that targets, harasses, or discriminates against individuals or groups | Conduct violation. |
 
@@ -117,32 +137,24 @@ The following content is **prohibited** in soul files and will result in PR reje
 
 ## Review Process
 
-Every PR goes through the following review steps:
+A maintainer reads each pull request and decides whether it is merged. No automated checks run on pull requests, so the checks in [Check Your File](#check-your-file) are yours to run.
 
-### 1. Automated checks
-
-- **Frontmatter validation** -- All required fields present and correctly formatted.
-- **Injection scan** -- The soul file is scanned with [HackMyAgent](https://github.com/opena2a-org/hackmyagent) for prompt injection patterns.
-- **Lint check** -- Markdown formatting is validated.
-
-### 2. Manual review
-
-A maintainer reviews the PR for:
+### What the maintainer looks at
 
 - **Quality** -- Does the soul meaningfully shape agent behavior? Is it specific and actionable?
-- **Uniqueness** -- Does it offer something distinct from existing souls in the same category?
+- **Uniqueness** -- Does it offer something distinct from existing souls in the same dimension?
 - **Safety** -- Does the soul respect reasonable boundaries? Does it instruct the agent to avoid harmful actions?
-- **Completeness** -- Does it include all required sections (identity, communication style, values, boundaries, working patterns)?
+- **Completeness** -- Does it carry the frontmatter fields and sections the [requirements table](#soul-file-requirements) lists, and is it listed in the README?
 
-### 3. Feedback and iteration
+### Feedback and iteration
 
-- If changes are needed, the reviewer will leave specific feedback on the PR.
+- If changes are needed, the maintainer leaves specific feedback on the pull request.
 - Address the feedback and push updates to your branch.
-- PRs that do not respond to feedback within 30 days will be closed. You can reopen by submitting a new PR.
+- A pull request with no response to feedback for 30 days may be closed. You can submit a new pull request later.
 
-### 4. Merge
+### Merge
 
-Once approved, the PR is squash-merged into `main`. Your soul file is then available in the repository and listed in the README.
+Accepted pull requests are squash-merged into `main`, so each one lands as a single commit.
 
 ---
 
@@ -150,14 +162,14 @@ Once approved, the PR is squash-merged into `main`. Your soul file is then avail
 
 To update a soul you originally authored:
 
-1. Open a PR with your changes.
-2. Bump the `version` field in the frontmatter.
-3. Include a brief description of what changed and why in the PR description.
+1. Open a pull request with your changes.
+2. Describe what changed and why in the pull request description.
+3. Run the checks in [Check Your File](#check-your-file).
 
 To propose changes to a soul authored by someone else:
 
 1. Open an issue first describing the proposed change and rationale.
-2. If the maintainers agree, open a PR with the changes.
+2. If the maintainers agree, open a pull request with the changes.
 
 ---
 
