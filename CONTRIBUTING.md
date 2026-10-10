@@ -14,6 +14,7 @@ Thank you for your interest in contributing. This guide covers where a new soul 
 - [Review Process](#review-process)
 - [Updating an Existing Soul](#updating-an-existing-soul)
 - [Code of Conduct](#code-of-conduct)
+- [License](#license)
 
 ---
 
@@ -185,3 +186,9 @@ We expect all contributors to:
 - Report unacceptable behavior to the maintainers.
 
 Violations may result in contribution privileges being revoked.
+
+---
+
+## License
+
+By submitting a contribution, you agree that it is licensed under the [Apache License 2.0](LICENSE), the same license that covers this repository.
