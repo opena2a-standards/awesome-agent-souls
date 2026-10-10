@@ -803,6 +803,19 @@ describe('readRules and readSections', () => {
     assert.equal(rule.match('souls/crew<>/x.md'), null);
   });
 
+  test('matches a location with many placeholders quickly, without a table of positions for each one', () => {
+    // A table with a row per placeholder and a column per character took about 112 ms and 26 MB for
+    // each 255-character name matched against 100,000 placeholders.
+    const [many] = readRules(`${TABLE_HEADER}| Odd | \`souls/${'<a>'.repeat(100_000)}\` | | |\n`);
+    const [long] = readRules(`${TABLE_HEADER}| Odd | \`souls/<first>${'<a>'.repeat(4_999)}.md\` | | |\n`);
+    const start = performance.now();
+    for (let i = 0; i < 20; i++) assert.equal(many.match(`souls/${String(i).padEnd(255, 'x')}`), null);
+    assert.deepEqual(long.match(`souls/${'x'.repeat(20_000)}.md`), { first: 'x'.repeat(15_001), a: 'x' });
+    assert.equal(long.match(`souls/${'x'.repeat(4_999)}.md`), null);
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 1000, `matched in ${Math.round(elapsed)} ms`);
+  });
+
   test('reads level-2 headings only', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',
@@ -1139,14 +1152,16 @@ describe('command line', () => {
 
 // npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
 // command asks for @latest, and without --yes it stops to ask before installing. A command is pinned
-// when `--yes <package>@latest` is followed by whitespace, a backtick, a sentence period or the end of
-// its line. A period after @latest ends the sentence unless a word character follows it, as in
+// when `--yes <package>@latest` is followed by a space, a tab, a backtick, a sentence period or the end
+// of its line. A period after @latest ends the sentence unless a word character follows it, as in
 // @latest.1, which names another release.
 // An npx command runs the package named by its first word that is not an option, so prose such as
 // "npx downloads hackmyagent" names the package without running it. The shell separates words by any
-// run of spaces and tabs, so the checks below do too.
+// run of spaces and tabs, and NPX_PINNED does too. NPX_PACKAGE also separates words by other
+// whitespace, such as a no-break space, so a command whose words are joined by one is still checked,
+// and is reported as not pinned.
 const NPX_PACKAGE = /^\s+(?:-\S*\s+)*(?:hackmyagent|opena2a-cli)\b/;
-const NPX_PINNED = /^\s+--yes\s+(?:hackmyagent|opena2a-cli)@latest(?=[\s`]|\.(?!\w)|$)/;
+const NPX_PINNED = /^[ \t]+--yes[ \t]+(?:hackmyagent|opena2a-cli)@latest(?=[ \t`]|\.(?!\w)|$)/;
 
 // The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
 // to read every one of them.
@@ -1180,7 +1195,7 @@ function unpinnedNpxCommands(file, text) {
 }
 
 describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
-  test('a command is pinned when @latest is followed by whitespace, a backtick, a sentence period or the end of its line', () => {
+  test('a command is pinned when @latest is followed by a space, a tab, a backtick, a sentence period or the end of its line', () => {
     const text = [
       'Run it as `npx --yes hackmyagent@latest`.',
       'npx --yes hackmyagent@latest',
@@ -1236,6 +1251,32 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.deepEqual(unpinnedNpxCommands('a.md', text), ['a.md:3: npx  hackmyagent secure .']);
   });
 
+  test('a command is not pinned when its words are joined by whitespace the shell does not split on', () => {
+    const text = [
+      'npx\u{a0}--yes\u{a0}hackmyagent@latest scan .',
+      'npx --yes\u{2009}opena2a-cli@latest guard verify',
+      'npx --yes\u{3000}hackmyagent@latest secure .',
+      'npx --yes\u{feff}hackmyagent@latest secure .',
+      'npx --yes\vhackmyagent@latest secure .',
+      'npx --yes\fhackmyagent@latest secure .',
+      'npx --yes\rhackmyagent@latest secure .',
+      'npx --yes hackmyagent@latest\u{a0}secure .',
+      'npx\u{a0}hackmyagent secure .',
+      'npx --yes hackmyagent@latest scan .',
+    ].join('\n');
+    assert.deepEqual(unpinnedNpxCommands('a.md', text), [
+      'a.md:1: npx\u{a0}--yes\u{a0}hackmyagent@latest scan .',
+      'a.md:2: npx --yes\u{2009}opena2a-cli@latest guard verify',
+      'a.md:3: npx --yes\u{3000}hackmyagent@latest secure .',
+      'a.md:4: npx --yes\u{feff}hackmyagent@latest secure .',
+      'a.md:5: npx --yes\vhackmyagent@latest secure .',
+      'a.md:6: npx --yes\fhackmyagent@latest secure .',
+      'a.md:7: npx --yes\rhackmyagent@latest secure .',
+      'a.md:8: npx --yes hackmyagent@latest\u{a0}secure .',
+      'a.md:9: npx\u{a0}hackmyagent secure .',
+    ]);
+  });
+
   test('every npx hackmyagent and npx opena2a-cli command runs the published release', () => {
     const texts = docTexts();
     assert.deepEqual(texts.map(([file]) => file).sort(), DOC_FILES);
@@ -1252,18 +1293,24 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 // opena2a-cli guard sign reads a word after `sign` as the directory to search for config files, and the
 // search skips SOUL.md, so in a directory holding only SOUL.md, `guard sign SOUL.md` and `guard sign`
 // sign nothing. It signs the files named after --files.
-const GUARD_SIGN = /\bguard\s+sign\b([^`#&\n]*)/g;
-const GUARD_SIGN_FILES = /^\s+--files\b/;
+// GUARD_SIGN_FILES separates words by spaces and tabs, as the shell does. GUARD_SIGN also separates
+// words by other whitespace, such as a no-break space, so a command whose words are joined by one is
+// still checked, and is reported even when --files follows.
+const GUARD_SIGN = /\bguard(\s+)sign\b([^`#&\n]*)/g;
+const GUARD_SIGN_FILES = /^[ \t]+--files\b/;
 
 // Where opena2a-cli guard sign writes its signatures.
 const GUARD_DIR = '.opena2a/guard/';
 const GUARD_STORE = `${GUARD_DIR}signatures.json`;
 
-// Returns `<file>:<line>: <text>` for each line of a markdown file with a `guard sign` command that does
-// not name its files after --files. Each `guard sign` on a line is checked.
+// Returns `<file>:<line>: <text>` for each line of a markdown file with a `guard sign` command that is not
+// followed by --files, or whose `guard` and `sign` are joined by whitespace other than spaces and tabs.
+// Each `guard sign` on a line is checked. Whether file names follow --files is not.
 function unnamedGuardSigns(file, text) {
   return text.split('\n').flatMap((line, index) => {
-    const unnamed = [...line.matchAll(GUARD_SIGN)].some(([, rest]) => !GUARD_SIGN_FILES.test(rest));
+    const unnamed = [...line.matchAll(GUARD_SIGN)].some(
+      ([, separator, rest]) => !/^[ \t]+$/.test(separator) || !GUARD_SIGN_FILES.test(rest),
+    );
     return unnamed ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
 }
@@ -1336,7 +1383,7 @@ function guardProblems(command, commands, soul, { timeout = SCAN_TIMEOUT_MS } = 
 }
 
 describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
-  test('a guard sign command names its files after --files', () => {
+  test('a guard sign command is followed by --files', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
       'Sign it with `guard sign --files SOUL.md`.',
@@ -1353,7 +1400,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
-  test('a guard sign command names its files when its words are separated by more than one space or a tab', () => {
+  test('a guard sign command is followed by --files when its words are separated by more than one space or a tab', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign  --files SOUL.md',
       'npx --yes opena2a-cli@latest guard  sign --files SOUL.md',
@@ -1361,6 +1408,32 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       'npx --yes opena2a-cli@latest guard  sign SOUL.md',
     ].join('\n');
     assert.deepEqual(unnamedGuardSigns('a.md', text), ['a.md:4: npx --yes opena2a-cli@latest guard  sign SOUL.md']);
+  });
+
+  test('a guard sign command does not name its files when --files follows whitespace the shell does not split on', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign\u{a0}--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign\u{2009}--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign\u{3000}--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign\u{feff}--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign\v--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign\f--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign\r--files SOUL.md',
+      'npx --yes opena2a-cli@latest guard\u{a0}sign SOUL.md',
+      'npx --yes opena2a-cli@latest guard\u{a0}sign --files SOUL.md',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
+    ].join('\n');
+    assert.deepEqual(unnamedGuardSigns('a.md', text), [
+      'a.md:1: npx --yes opena2a-cli@latest guard sign\u{a0}--files SOUL.md',
+      'a.md:2: npx --yes opena2a-cli@latest guard sign\u{2009}--files SOUL.md',
+      'a.md:3: npx --yes opena2a-cli@latest guard sign\u{3000}--files SOUL.md',
+      'a.md:4: npx --yes opena2a-cli@latest guard sign\u{feff}--files SOUL.md',
+      'a.md:5: npx --yes opena2a-cli@latest guard sign\v--files SOUL.md',
+      'a.md:6: npx --yes opena2a-cli@latest guard sign\f--files SOUL.md',
+      'a.md:7: npx --yes opena2a-cli@latest guard sign\r--files SOUL.md',
+      'a.md:8: npx --yes opena2a-cli@latest guard\u{a0}sign SOUL.md',
+      'a.md:9: npx --yes opena2a-cli@latest guard\u{a0}sign --files SOUL.md',
+    ]);
   });
 
   test('reads a guard command whose words are separated by more than one space or a tab, on one line', () => {
@@ -1390,7 +1463,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
-  test('every guard sign command names its files, and one signs SOUL.md and one verifies it', () => {
+  test('every guard sign command is followed by --files, and one signs SOUL.md and one verifies it', () => {
     const texts = docTexts();
     assert.deepEqual(texts.flatMap(([file, text]) => unnamedGuardSigns(file, text)), []);
     const commands = guardCommands(texts);
@@ -1402,6 +1475,16 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       commands.some((words) => words[1] === 'verify'),
       'no npx opena2a-cli guard verify command found in README.md, CONTRIBUTING.md or the guides',
     );
+  });
+
+  // The check accepts a guard sign --files with no file after it, so README.md can describe the command in
+  // prose. Only the opt-in OPENA2A_CLI run, which runs each npx guard sign command, would find one that signs
+  // nothing.
+  test('CONTRIBUTING.md says the default run checks guard sign for --files, not for the files after it', () => {
+    assert.deepEqual(unnamedGuardSigns('a.md', 'Then run `npx --yes opena2a-cli@latest guard sign --files` to sign.'), []);
+    const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
+    assert.match(guide, /It does not check that file names follow `--files`\./);
+    assert.doesNotMatch(guide, /followed by the files it signs|names its files after/);
   });
 
   test('README.md, CONTRIBUTING.md and the guides name the directory guard sign writes to', () => {
