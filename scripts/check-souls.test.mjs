@@ -1035,7 +1035,7 @@ describe('command line', () => {
       writeFileSync(join(root, 'README.md'), '');
       // A right-to-left override, zero width space, soft hyphen, line and paragraph separators and a
       // tag character outside the Basic Multilingual Plane.
-      const name = 'a‮b​c­d e f\u{e0041}g.md';
+      const name = 'a\u{202e}b\u{200b}c\xadd\u{2028}e\u{2029}f\u{e0041}g.md';
       writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
       const { status, stdout } = run(['--root', root], elsewhere);
       assert.equal(status, 1);
