@@ -789,6 +789,17 @@ describe('readRules and readSections', () => {
     assert.equal(rule.match('souls/xy'), null);
   });
 
+  test('reads a location with a long run of < and no closing > quickly, as literal text', () => {
+    // Splitting the location with a regular expression took about 8 seconds for this run.
+    const run = '<'.repeat(100_000);
+    const start = performance.now();
+    const [rule] = readRules(`${TABLE_HEADER}| Odd | \`souls/<name><>/${run}.md\` | | |\n`);
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 1000, `read in ${Math.round(elapsed)} ms`);
+    assert.deepEqual(rule.match(`souls/crew<>/${run}.md`), { name: 'crew' });
+    assert.equal(rule.match('souls/crew<>/x.md'), null);
+  });
+
   test('reads level-2 headings only', () => {
     assert.deepEqual(readSections(['# Title', '## Boundaries -- Things You Must Never Do', '### Detail']), [
       'Boundaries -- Things You Must Never Do',
