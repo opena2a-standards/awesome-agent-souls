@@ -330,12 +330,23 @@ describe('scannerCommand and scannerSpawn', () => {
   });
 
   test('on Windows builds the line for a word with a long run of backslashes in linear time', () => {
+    // Returns the line for words with a run of the given number of backslashes, and the time it took.
+    const build = (backslashes) => {
+      const run = '\\'.repeat(backslashes);
+      const start = performance.now();
+      const line = scannerSpawn(['node', ` ${run}x`, `a ${run}`, `${run}"x`], 'win32')[0];
+      return [line, performance.now() - start];
+    };
     const run = '\\'.repeat(100_000);
-    const start = performance.now();
-    const built = scannerSpawn(['node', ` ${run}x`, `a ${run}`, `${run}"x`], 'win32')[0];
-    const elapsed = performance.now() - start;
+    const [built, elapsed] = build(100_000);
     assert.equal(built, `node " ${run}x" "a ${run}${run}" ^"${run}${run}\\^"x^"`);
     assert.ok(elapsed < 1000, `built in ${Math.round(elapsed)} ms`);
+    // A time bound alone passes a quadratic build when the run is short enough. Twice the backslashes
+    // take twice as long in a linear build and four times as long in a quadratic one, so the times at
+    // two lengths are compared. Each is the fastest of ten builds, so a pause during one does not count.
+    const fastest = (backslashes) => Math.min(...Array.from({ length: 10 }, () => build(backslashes)[1]));
+    const ratio = fastest(100_000) / fastest(50_000);
+    assert.ok(ratio < 3, `twice the backslashes took ${ratio.toFixed(2)} times as long`);
   });
 });
 
@@ -1028,9 +1039,20 @@ describe('command line', () => {
 });
 
 // npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
-// command asks for @latest, and without --yes it stops to ask before installing.
+// command asks for @latest, and without --yes it stops to ask before installing. A period after @latest
+// ends the sentence unless a word character follows it, as in @latest.1, which names another release.
 const NPX_PACKAGE = /\b(?:hackmyagent|opena2a-cli)\b/;
-const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?![\w.-])/;
+const NPX_PINNED = /^ --yes (?:hackmyagent|opena2a-cli)@latest(?![\w-]|\.\w)/;
+
+// The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
+// to read every one of them.
+const DOC_FILES = [
+  'README.md',
+  'guides/creating-your-first-soul.md',
+  'guides/soul-for-teams.md',
+  'guides/soul-hardening.md',
+  'guides/soul-vs-skills.md',
+];
 
 // Returns [file, text] for README.md and each guide.
 function docTexts() {
@@ -1051,29 +1073,33 @@ function unpinnedNpxCommands(file, text) {
 }
 
 describe('npx commands in README.md and the guides', () => {
-  test('a command is pinned when it ends at a backtick or at the end of its line', () => {
+  test('a command is pinned when it ends at a backtick, a sentence period or the end of its line', () => {
     const text = [
       'Run it as `npx --yes hackmyagent@latest`.',
       'npx --yes hackmyagent@latest',
       'npx --yes opena2a-cli@latest guard verify',
+      'Run npx --yes hackmyagent@latest.',
       '`--yes` lets npx install it without asking.',
       'npx hackmyagent secure .',
       'npx --yes hackmyagent@0.30.0 secure .',
       'npx --yes hackmyagent@latest-beta secure .',
+      'npx --yes hackmyagent@latest.1 secure .',
       'npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
       'git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
     ].join('\n');
     assert.deepEqual(unpinnedNpxCommands('a.md', text), [
-      'a.md:5: npx hackmyagent secure .',
-      'a.md:6: npx --yes hackmyagent@0.30.0 secure .',
-      'a.md:7: npx --yes hackmyagent@latest-beta secure .',
-      'a.md:8: npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
-      'a.md:9: git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
+      'a.md:6: npx hackmyagent secure .',
+      'a.md:7: npx --yes hackmyagent@0.30.0 secure .',
+      'a.md:8: npx --yes hackmyagent@latest-beta secure .',
+      'a.md:9: npx --yes hackmyagent@latest.1 secure .',
+      'a.md:10: npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
+      'a.md:11: git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
     ]);
   });
 
   test('every npx hackmyagent and npx opena2a-cli command runs the published release', () => {
     const texts = docTexts();
+    assert.deepEqual(texts.map(([file]) => file).sort(), DOC_FILES);
     assert.deepEqual(texts.flatMap(([file, text]) => unpinnedNpxCommands(file, text)), []);
     for (const name of ['hackmyagent', 'opena2a-cli']) {
       assert.ok(
