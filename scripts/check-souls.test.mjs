@@ -708,6 +708,23 @@ describe('standardNames', () => {
   });
 });
 
+// A time bound alone passes a quadratic check when its input is short enough, so the linear time tests
+// compare the times at two sizes. Sixteen times the size takes sixteen times as long in a linear check
+// and 256 times as long in a quadratic one. LINEAR_TIME_RATIO lies four times above the first and four
+// times below the second, so a slower or busier machine leaves a linear check well under it, and a
+// quadratic check stays over it unless its fixed cost per call is about three times its quadratic cost
+// at the smaller size or more. Sizes only four times apart, with a bound of six, left a linear check as
+// little as 1.3 times under the bound.
+const LINEAR_TIME_RATIO = 64;
+
+// Returns how many times as long `time(size)` took as `time(size / 16)`, where `time` returns the time
+// taken by one check of the given size. Each time is the fastest of ten checks, so a pause during one
+// does not count.
+function timeRatio(time, size) {
+  const fastest = (n) => Math.min(...Array.from({ length: 10 }, () => time(n)));
+  return fastest(size) / fastest(size / 16);
+}
+
 describe('standardsExamples', () => {
   test('reads each example of a name read whole, read as another name, or not checked', () => {
     const guide = [
@@ -738,32 +755,32 @@ describe('standardsExamples', () => {
     return performance.now() - start;
   };
 
-  // Asserts that a description of `repeats` repeats of `words` is read in under a second, and that four
-  // times the repeats take less than six times as long.
+  // Asserts that a description of `repeats` repeats of `words` is read in under a second, and that it
+  // takes less than LINEAR_TIME_RATIO times as long as one of a sixteenth of the repeats. `repeats` is a
+  // multiple of sixteen, so the shorter description holds a whole number of repeats.
   const assertLinear = (words, repeats) => {
     const elapsed = read(words, repeats);
     assert.ok(elapsed < 1000, `read ${repeats} repeats of '${words}' in ${Math.round(elapsed)} ms`);
-    const fastest = (count) => Math.min(...Array.from({ length: 10 }, () => read(words, count)));
-    const ratio = fastest(repeats) / fastest(repeats / 4);
-    assert.ok(ratio < 6, `four times the repeats of '${words}' took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio((count) => read(words, count), repeats);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the repeats of '${words}' took ${ratio.toFixed(2)} times as long`);
   };
 
   test('reads a long description that repeats a read example in linear time', () => {
     // Each `so ` was tried as the start of a cell, each ` is read as ` after it as the end of that cell,
     // and the rest of the description after each as a name: twice the repeats, eight times as long.
-    assertLinear('so x is read as x ', 1_000);
+    assertLinear('so x is read as x ', 1_600);
   });
 
   test('reads a long description that repeats and in linear time', () => {
     // The rest of the description after each ` and ` was tried as a cell: twice the repeats, four times
     // as long.
-    assertLinear(' and x', 40_000);
+    assertLinear(' and x', 64_000);
   });
 
   test('reads a long description that repeats does not check in linear time', () => {
     // The rest of the description after each `does not check` was tried as a list of cells: twice the
     // repeats, four times as long.
-    assertLinear('does not check x ', 20_000);
+    assertLinear('does not check x ', 32_000);
   });
 });
 
@@ -871,23 +888,6 @@ describe('scanSoulProblems', () => {
     },
   );
 });
-
-// A time bound alone passes a quadratic check when its input is short enough, so the linear time tests
-// compare the times at two sizes. Sixteen times the size takes sixteen times as long in a linear check
-// and 256 times as long in a quadratic one. LINEAR_TIME_RATIO lies four times above the first and four
-// times below the second, so a slower or busier machine leaves a linear check well under it, and a
-// quadratic check stays over it unless its fixed cost per call is about three times its quadratic cost
-// at the smaller size or more. Sizes only four times apart, with a bound of six, left a linear check as
-// little as 1.3 times under the bound.
-const LINEAR_TIME_RATIO = 64;
-
-// Returns how many times as long `time(size)` took as `time(size / 16)`, where `time` returns the time
-// taken by one check of the given size. Each time is the fastest of ten checks, so a pause during one
-// does not count.
-function timeRatio(time, size) {
-  const fastest = (n) => Math.min(...Array.from({ length: 10 }, () => time(n)));
-  return fastest(size) / fastest(size / 16);
-}
 
 describe('scannerCommand and scannerSpawn', () => {
   test('splits HACKMYAGENT into words and keeps a quoted word whole', () => {
@@ -3280,5 +3280,49 @@ describe('this test file', () => {
 
   test('a comment line that ends inside a sentence is at least half as wide as the widest line of its comment', () => {
     assert.deepEqual(shortCommentLines(readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/)), []);
+  });
+
+  // A line that compares `ratio` with a bound, as the first argument of `assert.ok` on that line or on a
+  // line of its own. The group holds the bound.
+  const RATIO_BOUND = /^\s*(?:assert\.ok\()?ratio < ([^,]*),/;
+
+  // Returns one line for each line in `lines` that sets `ratio` without a call of timeRatio, or that compares
+  // it with a bound other than LINEAR_TIME_RATIO. A linear time test that divides two times of its own, or
+  // has a bound of its own, is reported so that it compares the sizes and the bound that the comment on
+  // LINEAR_TIME_RATIO gives the reasons for.
+  function ownTimeRatios(lines) {
+    return lines.flatMap((line, index) => {
+      if (/^\s*(?:const|let) ratio = (?!timeRatio\()/.test(line)) {
+        return [`line ${index + 1} sets a time ratio without timeRatio`];
+      }
+      const bound = RATIO_BOUND.exec(line)?.[1];
+      if (bound !== undefined && bound !== 'LINEAR_TIME_RATIO') {
+        return [`line ${index + 1} compares a time ratio with ${bound}, not LINEAR_TIME_RATIO`];
+      }
+      return [];
+    });
+  }
+
+  test('reports a time ratio set without timeRatio, or compared with a bound other than LINEAR_TIME_RATIO', () => {
+    const lines = [
+      '    const ratio = fastest(repeats) / fastest(repeats / 4);',
+      '    assert.ok(ratio < 6, `four times the repeats took too long`);',
+      '      ratio < LINEAR_TIME_RATIO * 2,',
+      '    const ratio = timeRatio(check, 32_000);',
+      '    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the repeats took too long`);',
+      '      ratio < LINEAR_TIME_RATIO,',
+    ];
+    assert.deepEqual(ownTimeRatios(lines), [
+      'line 1 sets a time ratio without timeRatio',
+      'line 2 compares a time ratio with 6, not LINEAR_TIME_RATIO',
+      'line 3 compares a time ratio with LINEAR_TIME_RATIO * 2, not LINEAR_TIME_RATIO',
+    ]);
+  });
+
+  test('every time ratio is set with timeRatio and compared with LINEAR_TIME_RATIO', () => {
+    const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
+    assert.deepEqual(ownTimeRatios(lines), []);
+    // With no comparison in the file, the check above would have checked nothing.
+    assert.ok(lines.some((line) => RATIO_BOUND.test(line)), 'no comparison of a time ratio was found');
   });
 });
