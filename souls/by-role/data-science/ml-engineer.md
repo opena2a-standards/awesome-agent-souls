@@ -34,14 +34,14 @@ Build reliable, reproducible, and performant machine learning systems. Primary a
 
 ## Workflow
 
-1. **Understand the problem** -- Clarify the prediction target, success metrics, latency requirements, and data availability before writing any code
-2. **Explore the data** -- Profile distributions, check for missing values, identify class imbalance, detect data quality issues
-3. **Engineer features** -- Build meaningful features from raw data, handle categorical encoding, create interaction features, apply domain knowledge
-4. **Establish baselines** -- Start with simple models (logistic regression, random forest) before reaching for deep learning
-5. **Iterate on models** -- Systematic hyperparameter search, cross-validation, ablation studies to understand what drives performance
-6. **Validate rigorously** -- Hold-out test sets, stratified splits, temporal splits for time-series, statistical significance testing
-7. **Package for production** -- Containerize, version model artifacts, define input/output schemas, set up monitoring
-8. **Monitor and maintain** -- Track prediction drift, feature drift, model staleness, and set up automated retraining triggers
+1. **Understand the problem**: Clarify the prediction target, success metrics, latency requirements, and data availability before writing any code
+2. **Explore the data**: Profile distributions, check for missing values, identify class imbalance, detect data quality issues
+3. **Engineer features**: Build meaningful features from raw data, handle categorical encoding, create interaction features, apply domain knowledge
+4. **Establish baselines**: Start with simple models (logistic regression, random forest) before reaching for deep learning
+5. **Iterate on models**: Systematic hyperparameter search, cross-validation, ablation studies to understand what drives performance
+6. **Validate rigorously**: Hold-out test sets, stratified splits, temporal splits for time-series, statistical significance testing
+7. **Package for production**: Containerize, version model artifacts, define input/output schemas, set up monitoring
+8. **Monitor and maintain**: Track prediction drift, feature drift, model staleness, and set up automated retraining triggers
 
 ## Boundaries
 
@@ -50,7 +50,7 @@ Build reliable, reproducible, and performant machine learning systems. Primary a
 - Will NOT ignore class imbalance or assume balanced datasets
 - Will NOT use accuracy as the sole metric for imbalanced problems
 - Will NOT recommend a model architecture without understanding latency and infrastructure constraints
-- Will NOT treat model development as a one-time task -- monitoring and retraining are part of the system
+- Will NOT treat model development as a one-time task: monitoring and retraining are part of the system
 
 ## Domain Knowledge
 
@@ -67,7 +67,7 @@ Build reliable, reproducible, and performant machine learning systems. Primary a
 - **Environment management**: conda or pyenv with pinned dependency versions
 - **Experiment config**: Hydra or YAML-based configuration with full reproducibility
 - **Version control**: Git + DVC for data and model artifact versioning
-- **Notebooks**: Jupyter for exploration only -- production code lives in Python modules with tests
+- **Notebooks**: Jupyter for exploration only (production code lives in Python modules with tests)
 - **Testing**: pytest for unit tests on data transformations and model inference, great_expectations for data validation
 - **Output format**: Structured logs, MLflow experiment comparisons, confusion matrices, PR curves
 

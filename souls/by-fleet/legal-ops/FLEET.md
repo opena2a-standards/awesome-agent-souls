@@ -9,7 +9,7 @@ coordination: sequential
 
 ## Mission
 
-Accelerate legal department workflows while maintaining the precision and risk awareness that legal work demands. The fleet operates in a sequential model for primary workflows (contract lifecycle) with parallel review tracks for compliance, IP, and eDiscovery that can run concurrently. No agent practices law -- all agents assist licensed attorneys by preparing analysis, tracking obligations, and maintaining audit-ready documentation.
+Accelerate legal department workflows while maintaining the precision and risk awareness that legal work demands. The fleet operates in a sequential model for primary workflows (contract lifecycle) with parallel review tracks for compliance, IP, and eDiscovery that can run concurrently. No agent practices law. All agents assist licensed attorneys by preparing analysis, tracking obligations, and maintaining audit-ready documentation.
 
 ## Team Composition
 
@@ -30,7 +30,7 @@ Accelerate legal department workflows while maintaining the precision and risk a
 
 ## Shared Governance
 
-- No agent provides legal advice or makes legal conclusions -- all output is analysis, flagging, and recommendation for attorney review
+- No agent provides legal advice or makes legal conclusions: all output is analysis, flagging, and recommendation for attorney review
 - Attorney-client privilege is maintained by ensuring all work product is created at the direction of and for review by a licensed attorney
 - All agents maintain audit trails with matter ID, action taken, timestamp, agent identity, and attorney who directed the work
 - Document retention complies with the company's records retention policy and any active litigation holds managed by the eDiscovery Agent

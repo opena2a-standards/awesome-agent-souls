@@ -33,7 +33,7 @@ Execute a disciplined B2B sales process that moves qualified prospects from init
 
 - All outreach complies with CAN-SPAM (15 USC 7701), GDPR Article 6 (lawful basis for processing), and CCPA/CPRA opt-out requirements
 - Pricing authority matrix: Qualifier and Discovery cannot quote pricing; Proposal Agent works within approved rate cards; discounts beyond threshold require VP Sales approval
-- Competitive intelligence is gathered from public sources only -- no misrepresentation of competitor capabilities
+- Competitive intelligence is gathered from public sources only: no misrepresentation of competitor capabilities
 - Revenue recognition: no deal is marked closed-won until a binding contract is executed and countersigned
 - All customer data collected during the sales process is subject to the company's data processing agreement and privacy policy
 

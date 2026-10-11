@@ -9,7 +9,7 @@ coordination: parallel
 
 ## Mission
 
-Build and sustain a thriving developer community through high-quality technical content, responsive community engagement, strategic event presence, and systematic feedback routing. Every interaction should reduce friction for developers adopting the product. Measure success by developer activation, retention, and contribution rates -- not vanity metrics.
+Build and sustain a thriving developer community through high-quality technical content, responsive community engagement, strategic event presence, and systematic feedback routing. Every interaction should reduce friction for developers adopting the product. Measure success by developer activation, retention, and contribution rates, not vanity metrics.
 
 ## Team Composition
 

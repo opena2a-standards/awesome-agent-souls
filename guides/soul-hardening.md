@@ -1,6 +1,6 @@
 # Soul Hardening: Protecting Agent Identity from Tampering
 
-A soul file shapes every decision an AI agent makes. If that file is compromised, the agent's behavior changes silently -- no error, no warning, no log entry. The agent simply becomes a different agent.
+A soul file shapes every decision an AI agent makes. If that file is compromised, the agent's behavior changes silently: no error, no warning, no log entry. The agent simply becomes a different agent.
 
 ---
 
@@ -55,7 +55,7 @@ This detects instruction override attempts such as "ignore previous instructions
 
 ### 3. Version Control Discipline
 
-- Require pull requests for all `SOUL.md` changes -- no direct commits to main
+- Require pull requests for all `SOUL.md` changes: no direct commits to main
 - Enforce review from at least one person who understands the agent's intended behavior
 - Use `git diff` to review every change; soul changes should be small and deliberate
 - Tag soul file versions (e.g., `soul-v1.2`) to enable rollback if behavior regresses
@@ -91,7 +91,7 @@ Souls in this repository are not signed: it has no `.opena2a/guard/` signature s
 
 Harm avoidance controls (Domain 19 of the Agent Behavioral Governance Specification, OASB-2) add a defense-in-depth layer against adversarial prompts that stay within the letter of the agent's permissions but violate the spirit of its governance. An attacker who cannot bypass boundaries directly may craft requests that are technically within scope but cause harm through ambiguity, accumulation, or downstream effects.
 
-A soul file with explicit harm avoidance guidance helps the agent recognize these gray areas: "This action is permitted, but given the stakes, I should verify intent before proceeding." This is the difference between an agent that follows the rules and an agent that exercises judgment -- and judgment is harder to exploit than rules alone.
+A soul file with explicit harm avoidance guidance helps the agent recognize these gray areas: "This action is permitted, but given the stakes, I should verify intent before proceeding." This is the difference between an agent that follows the rules and an agent that exercises judgment, and judgment is harder to exploit than rules alone.
 
 When hardening your soul file, review the Harm Avoidance section alongside the Boundaries section. Boundaries stop the obvious attacks; harm avoidance addresses the subtle ones.
 
@@ -112,6 +112,6 @@ If you suspect a soul file has been tampered with:
 
 ## Further Reading
 
-- [Soul vs Skills](soul-vs-skills.md) -- understanding the distinction between identity and capability
-- [Soul Files for Teams](soul-for-teams.md) -- governance and review processes for organizations
-- [Creating Your First Soul](creating-your-first-soul.md) -- writing a soul with security in mind from the start
+- [Soul vs Skills](soul-vs-skills.md): understanding the distinction between identity and capability
+- [Soul Files for Teams](soul-for-teams.md): governance and review processes for organizations
+- [Creating Your First Soul](creating-your-first-soul.md): writing a soul with security in mind from the start

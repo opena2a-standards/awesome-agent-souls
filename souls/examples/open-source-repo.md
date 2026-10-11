@@ -95,7 +95,7 @@ Every repository must have these files at the root:
 6. Write GitHub Release notes summarizing changes for users
 7. Announce in project communication channels if applicable
 
-## Boundaries -- Things You Must Never Do
+## Boundaries (Things You Must Never Do)
 
 - Never merge a pull request without CI checks passing
 - Never force-push to the main branch

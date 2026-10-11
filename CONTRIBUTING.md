@@ -51,7 +51,7 @@ How to read the table:
 
 - A word in angle brackets is one path segment you choose. For By Role, `<area>` is one of `security`, `development`, `devops`, `data-science`, `leadership` or `creative`.
 - `category: industry` means the field must have exactly that value. `fleet: <fleet>` and `name: <fleet>` mean the value must equal the fleet's directory name.
-- A section is present when the file has a `##` heading with that name, or a `##` heading that starts with the name followed by a space (for example `## Boundaries -- Things You Must Never Do`). Section order is not checked; existing souls put `Identity` first and `Harm Avoidance` last.
+- A section is present when the file has a `##` heading with that name, or a `##` heading that starts with the name followed by a space (for example `## Boundaries (Things You Must Never Do)`). Section order is not checked; existing souls put `Identity` first and `Harm Avoidance` last.
 - The table lists the sections a file must contain. A soul may add other `##` sections: By Use Case souls add `Core Capabilities` or `Workflow`, and `personal-assistant.md` also adds `Values and Principles`. The starter examples add sections for their kind of project: `open-source-repo.md` adds `Git Practices`, `Licensing` and `Release Process` among others, and `website-project.md` adds `Tech Stack`, `Testing` and `Deployment` among others. Templates list every section in the README, as [Check Your File](#check-your-file) describes.
 - `Boundaries` or `Constraints`: fleet members carry one of the two. The `incident-response-team`, `red-team-ops` and `soc-defense` fleets use `Core Responsibilities`, `Behavioral Rules` and `Constraints`; the other fleets use `Core Mission`, `Communication Style`, `Workflow`, `Boundaries` and `Handoff Protocol`. Follow the layout of the fleet you are adding to.
 - `Harm Avoidance` covers judgment in gray areas, where an action is technically permitted but may cause unintended harm. See the README introduction for the specification it follows.
@@ -96,7 +96,15 @@ Nothing runs automatically on pull requests: the repository has no CI workflow. 
 
    It checks every `.md` file under `souls/` and `templates/` against the [requirements table](#soul-file-requirements): the file sits at a listed location, carries the required frontmatter fields and sections, and, for files under `souls/`, is linked from README.md directly or through its fleet directory. A file under `templates/` must have a row in the README's [Templates](README.md#templates-4-templates) table whose last cell lists all of the template's `##` sections in file order, so a change to a template's sections also changes that row. It prints one line per problem and exits with a non-zero status if it finds any. If you change the script, or a command in README.md, this file or a guide that runs hackmyagent or opena2a-cli through npx, also run `node --test scripts/check-souls.test.mjs`; it checks that every such command is written `npx --yes <package>@latest`, and that every signing command is written `guard sign --files`. It does not check that file names follow `--files`. If you change a template or the guide's Minimal Template, set the `HACKMYAGENT` environment variable to `npx --yes hackmyagent@latest`, in quotes because the command contains spaces, and run `node --test scripts/check-souls.test.mjs`: with `HACKMYAGENT` set, the tests also run `hackmyagent scan-soul` on every template and the Minimal Template and fail if the scan exits non-zero, does not detect the role-play refusal, or runs longer than two minutes. `@latest` makes npx run the published release even when an older `hackmyagent` is installed. The tests run the scanner with `OPENA2A_TELEMETRY=off`, which turns off its anonymous usage telemetry. If you change a `guard sign --files` or `guard verify` command, set `OPENA2A_CLI` to `npx --yes opena2a-cli@latest`, quoted the same way, and run `node --test scripts/check-souls.test.mjs`: with `OPENA2A_CLI` set, the tests also run each such command, with telemetry off, in a directory that holds only a `SOUL.md`, and fail if signing does not write `.opena2a/guard/signatures.json`, if `guard verify` fails on the signed file, or if it passes after the file changes.
 
-2. **Injection scan.** Scan your file for prompt-injection patterns as described in [Soul Hardening](README.md#soul-hardening).
+2. **Prose check.** Requires Node.js and git; there is nothing to install.
+
+   ```bash
+   node scripts/check-docs-prose.mjs
+   ```
+
+   It reads every `.md` and `.mdx` file git tracks, so run `git add` on a new file first. It prints `file:line:column` for each dash in the prose: a double hyphen that stands alone between spaces, an em dash, or an en dash that stands alone between spaces. Write the sentence with a period, a comma, a colon or parentheses instead. It also reports a heading named "Why this exists" or "Why this matters": put what that section says under the heading it explains. Fenced code blocks and inline code are not checked, so a command keeps its `--` separator and its `--flag` options. It exits with a non-zero status if it finds a problem. If you change the script, also run `node --test scripts/check-docs-prose.test.mjs`.
+
+3. **Injection scan.** Scan your file for prompt-injection patterns as described in [Soul Hardening](README.md#soul-hardening).
 
 ---
 
@@ -143,10 +151,10 @@ A maintainer reads each pull request and decides whether it is merged. No automa
 
 ### What the maintainer looks at
 
-- **Quality** -- Does the soul meaningfully shape agent behavior? Is it specific and actionable?
-- **Uniqueness** -- Does it offer something distinct from existing souls in the same dimension?
-- **Safety** -- Does the soul respect reasonable boundaries? Does it instruct the agent to avoid harmful actions?
-- **Completeness** -- Does it carry the frontmatter fields and sections the [requirements table](#soul-file-requirements) lists, and is it listed in the README?
+- **Quality**: Does the soul meaningfully shape agent behavior? Is it specific and actionable?
+- **Uniqueness**: Does it offer something distinct from existing souls in the same dimension?
+- **Safety**: Does the soul respect reasonable boundaries? Does it instruct the agent to avoid harmful actions?
+- **Completeness**: Does it carry the frontmatter fields and sections the [requirements table](#soul-file-requirements) lists, and is it listed in the README?
 
 ### Feedback and iteration
 

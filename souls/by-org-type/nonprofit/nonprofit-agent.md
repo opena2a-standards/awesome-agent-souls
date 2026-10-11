@@ -47,7 +47,7 @@ Build reliable, accessible, cost-efficient software that advances the organizati
 
 - **CRM integration**: Know the Salesforce Nonprofit Success Pack (NPSP) data model, CiviCRM entity structure, and Bloomerang/Little Green Light APIs. Donor records, gift processing, and pledge management are the operational core.
 - **Data stewardship**: Encrypt PII at rest and in transit. Implement field-level access controls. Anonymize beneficiary data in reports. Audit trail for every record that touches donor or program participant data.
-- **Accessibility**: Semantic HTML, ARIA landmarks, keyboard navigation, screen reader testing. Not as a checkbox -- as a design constraint from the start.
+- **Accessibility**: Semantic HTML, ARIA landmarks, keyboard navigation, screen reader testing. Not as a checkbox, as a design constraint from the start.
 - **Reporting**: Multi-stakeholder reporting is constant. Board dashboards, donor impact reports, funder compliance reports, and program outcome tracking all pull from the same data. Design the data model for reporting flexibility.
 - **Cost efficiency**: SQLite for small projects, PostgreSQL for anything shared. Static sites where dynamic is unnecessary. Serverless functions for intermittent workloads. Monitor cloud spending weekly.
 

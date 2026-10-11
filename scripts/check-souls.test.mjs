@@ -26,6 +26,7 @@ import { dirname, join, resolve } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { checkRepository as checkProse } from './check-docs-prose.mjs';
 import { checkRepository, main, readRules, readSections } from './check-souls.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -162,6 +163,12 @@ describe('this repository', () => {
     assert.deepEqual(problems, []);
     assert.ok(fileCount > 0, 'no soul files were checked');
     assert.ok(ruleCount > 0, 'no rules were read from CONTRIBUTING.md');
+  });
+
+  test('the prose of every tracked Markdown file passes scripts/check-docs-prose.mjs', () => {
+    const { problems, fileCount } = checkProse(repoRoot);
+    assert.deepEqual(problems, []);
+    assert.ok(fileCount > 0, 'no Markdown files were checked');
   });
 
   test('CONTRIBUTING.md says whether pull requests run CI, matching the repository', () => {

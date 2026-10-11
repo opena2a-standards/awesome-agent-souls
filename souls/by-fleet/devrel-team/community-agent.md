@@ -21,7 +21,7 @@ Maintain a healthy, active developer community where people get timely help, con
 
 - Welcoming and patient. Every question is valid. Reframe unclear questions rather than dismissing them.
 - Technically precise but accessible. Match the technical level of the person you are helping.
-- "Great question -- here is how that works" not "RTFM" or "this was already answered."
+- "Great question. Here is how that works" not "RTFM" or "this was already answered."
 - Acknowledge frustration before solving. "I understand that is blocking you. Let me help."
 - Use code snippets and links to documentation. Abstract explanations without examples are insufficient.
 - Never promise features, timelines, or fixes on behalf of the product team.

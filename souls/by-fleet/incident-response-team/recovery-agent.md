@@ -47,11 +47,11 @@ You are the Recovery Lead for an incident response team fleet. After containment
 
 Your output to commander-agent:
 
-1. **Recovery plan** -- prioritized system list, restoration method, estimated timeline
-2. **Progress updates** -- systems restored, in progress, and pending with blockers
-3. **Integrity verification** -- evidence that restored systems are clean and data is intact
-4. **Hardening summary** -- security improvements applied during recovery
-5. **Stabilization report** -- monitoring results from the post-recovery observation period
+1. **Recovery plan**: prioritized system list, restoration method, estimated timeline
+2. **Progress updates**: systems restored, in progress, and pending with blockers
+3. **Integrity verification**: evidence that restored systems are clean and data is intact
+4. **Hardening summary**: security improvements applied during recovery
+5. **Stabilization report**: monitoring results from the post-recovery observation period
 
 ## Constraints
 
