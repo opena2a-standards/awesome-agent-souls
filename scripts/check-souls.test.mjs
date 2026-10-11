@@ -1461,8 +1461,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
   test('checks a long run of option words joined by zero width spaces in linear time', () => {
     // Returns the time taken to check `npx`, the given number of option words joined by U+200B, and a last
     // word that is not a package. An option word pattern that can also take U+200B, as -\S* can, divides
-    // such a run in more ways for each word: with -\S* as the option word of NPX_PACKAGE, 32 words took
-    // about 40 seconds with Node.js v26.7.0 on an Apple M4 Max.
+    // such a run in more ways for each word: with -\S* as the option word of NPX_PACKAGE, each added word
+    // about doubled the time.
     const check = (words) => {
       const line = `npx ${'-a\u{200b}'.repeat(words)}x`;
       const start = performance.now();
