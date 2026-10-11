@@ -129,23 +129,79 @@ function standardNames(cell) {
   return names;
 }
 
+// A comma, a semicolon or a period that no word character follows ends a clause of the description of the
+// standards test, so the period in WCAG 2.1 does not. The group keeps each end in the result of a split.
+const CLAUSE_END = /([,;]|\.(?!\w))/;
+
+// The words before a cell in an example of a name the standards test reads.
+const CELL_START = /\bso | and /g;
+
 // Returns the description of the standards test in `guide`, from its sentence on the By Industry table to
 // the next `If you change`, and the examples it gives of the names `standardNames` reads, each as a cell
 // and the names read from it: `<cell> is read whole` and `<cell> is read as <name>` give one name, and
-// `does not check <cell> or <cell>` gives none.
+// `does not check <cell> or <cell>` gives none. An example ends at the end of a clause, and a read example
+// may also end at ` and `. The text is split into clauses and each clause is read once, so the time taken
+// grows with the length of the text, however often a clause repeats the words of an example.
 function standardsExamples(guide) {
   const start = guide.indexOf("If you change a row of the README's By Industry");
   assert.ok(start >= 0, 'CONTRIBUTING.md: the description of the standards test was not found');
   const end = guide.indexOf('If you change', start + 1);
   const text = guide.slice(start, end < 0 ? undefined : end);
-  const name = String.raw`(?:[^,;.]|\.(?=\w))+?`;
-  const examples = [];
-  const read = new RegExp(String.raw`(?:, (?:so )?|\bso | and )(${name}) is read (?:whole|as (${name}))(?=[,;]|\.(?!\w)| and )`, 'g');
-  for (const [, cell, as] of text.matchAll(read)) examples.push([cell, [as ?? cell]]);
-  for (const [, list] of text.matchAll(/does not check (.+?)(?=[,;]|\.(?!\w))/g)) {
-    for (const cell of list.split(' or ')) examples.push([cell, []]);
+  const read = [];
+  const unchecked = [];
+  // Clauses at even indexes, each followed by the end at the next index; the last clause has no end.
+  const parts = text.split(CLAUSE_END);
+  for (let index = 0; index < parts.length; index += 2) {
+    const ended = index + 1 < parts.length;
+    read.push(...readExamples(parts[index], ended, parts[index - 1] === ','));
+    const words = parts[index].indexOf('does not check ');
+    const list = words < 0 ? '' : parts[index].slice(words + 'does not check '.length);
+    if (ended && list) for (const cell of list.split(' or ')) unchecked.push([cell, []]);
   }
-  return { text, examples };
+  return { text, examples: [...read, ...unchecked] };
+}
+
+// Returns a cell and the one name read from it for each `<cell> is read whole` and `<cell> is read as
+// <name>` in a clause, in order. `ended` says whether a comma, semicolon or period ends the clause, and
+// `afterComma` whether a comma comes before it. The clause is split at ` is read `: a cell runs from the
+// first `so ` or ` and ` in the part before, or from the start of the clause after `, ` or `, so `, to the
+// end of that part, and the part after starts with `whole` or `as <name>`, which ends at ` and ` or at
+// the end of the clause when the clause ends. The next cell may start at that ` and `.
+function readExamples(clause, ended, afterComma) {
+  const parts = clause.split(' is read ');
+  const examples = [];
+  // Where a cell may start in the next part: at the ` and ` that ends the example before it, if one does.
+  let from = 0;
+  for (let index = 0; index + 1 < parts.length; index += 1) {
+    const before = parts[index];
+    const after = parts[index + 1];
+    let cellStart = -1;
+    if (index === 0 && afterComma && before.startsWith(' ')) {
+      cellStart = before.startsWith(' so ') ? 4 : 1;
+    } else {
+      CELL_START.lastIndex = from;
+      const words = CELL_START.exec(before);
+      if (words) cellStart = words.index + words[0].length;
+    }
+    from = 0;
+    const cell = cellStart < 0 ? '' : before.slice(cellStart);
+    let exampleEnd = -1;
+    let name = cell;
+    if (after.startsWith('whole')) {
+      exampleEnd = 5;
+    } else if (after.startsWith('as ')) {
+      const and = after.indexOf(' and ', 4);
+      exampleEnd = and < 0 ? after.length : and;
+      name = after.slice(3, exampleEnd);
+    }
+    const ends =
+      exampleEnd === after.length ? index + 2 === parts.length && ended : after.startsWith(' and ', exampleEnd);
+    if (cell && name && exampleEnd >= 0 && ends) {
+      examples.push([cell, [name]]);
+      from = exampleEnd;
+    }
+  }
+  return examples;
 }
 
 // Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
@@ -672,6 +728,43 @@ describe('standardsExamples', () => {
       ['attorney-client privilege', []],
     ]);
   });
+
+  // Returns the time taken to read the examples in a description of the given number of repeats of `words`,
+  // with no comma, semicolon or period, so no example ends and none is read.
+  const read = (words, repeats) => {
+    const guide = `If you change a row of the README's By Industry table ${words.repeat(repeats)}`;
+    const start = performance.now();
+    assert.deepEqual(standardsExamples(guide).examples, []);
+    return performance.now() - start;
+  };
+
+  // Asserts that a description of `repeats` repeats of `words` is read in under a second, and that four
+  // times the repeats take less than six times as long.
+  const assertLinear = (words, repeats) => {
+    const elapsed = read(words, repeats);
+    assert.ok(elapsed < 1000, `read ${repeats} repeats of '${words}' in ${Math.round(elapsed)} ms`);
+    const fastest = (count) => Math.min(...Array.from({ length: 10 }, () => read(words, count)));
+    const ratio = fastest(repeats) / fastest(repeats / 4);
+    assert.ok(ratio < 6, `four times the repeats of '${words}' took ${ratio.toFixed(2)} times as long`);
+  };
+
+  test('reads a long description that repeats a read example in linear time', () => {
+    // Each `so ` was tried as the start of a cell, each ` is read as ` after it as the end of that cell,
+    // and the rest of the description after each as a name: twice the repeats, eight times as long.
+    assertLinear('so x is read as x ', 1_000);
+  });
+
+  test('reads a long description that repeats and in linear time', () => {
+    // The rest of the description after each ` and ` was tried as a cell: twice the repeats, four times
+    // as long.
+    assertLinear(' and x', 40_000);
+  });
+
+  test('reads a long description that repeats does not check in linear time', () => {
+    // The rest of the description after each `does not check` was tried as a list of cells: twice the
+    // repeats, four times as long.
+    assertLinear('does not check x ', 20_000);
+  });
 });
 
 // A directory a suite's tests share is created in a `before` hook: a test run filtered by name runs
@@ -779,6 +872,23 @@ describe('scanSoulProblems', () => {
   );
 });
 
+// A time bound alone passes a quadratic check when its input is short enough, so the linear time tests
+// compare the times at two sizes. Sixteen times the size takes sixteen times as long in a linear check
+// and 256 times as long in a quadratic one. LINEAR_TIME_RATIO lies four times above the first and four
+// times below the second, so a slower or busier machine leaves a linear check well under it, and a
+// quadratic check stays over it unless its fixed cost per call is about three times its quadratic cost
+// at the smaller size or more. Sizes only four times apart, with a bound of six, left a linear check as
+// little as 1.3 times under the bound.
+const LINEAR_TIME_RATIO = 64;
+
+// Returns how many times as long `time(size)` took as `time(size / 16)`, where `time` returns the time
+// taken by one check of the given size. Each time is the fastest of ten checks, so a pause during one
+// does not count.
+function timeRatio(time, size) {
+  const fastest = (n) => Math.min(...Array.from({ length: 10 }, () => time(n)));
+  return fastest(size) / fastest(size / 16);
+}
+
 describe('scannerCommand and scannerSpawn', () => {
   test('splits HACKMYAGENT into words and keeps a quoted word whole', () => {
     assert.equal(scannerCommand(undefined), null);
@@ -829,14 +939,8 @@ describe('scannerCommand and scannerSpawn', () => {
     const [built, elapsed] = build(100_000);
     assert.equal(built, `node " ${run}x" "a ${run}${run}" ^"${run}${run}\\^"x^"`);
     assert.ok(elapsed < 1000, `built in ${Math.round(elapsed)} ms`);
-    // A time bound alone passes a quadratic build when the run is short enough. Four times the
-    // backslashes take four times as long in a linear build and sixteen times as long in a quadratic
-    // one, so the times at two lengths are compared. Lengths only twice apart would leave a quadratic
-    // build with a large fixed cost per call close to the bound. Each time is the fastest of ten
-    // builds, so a pause during one does not count.
-    const fastest = (backslashes) => Math.min(...Array.from({ length: 10 }, () => build(backslashes)[1]));
-    const ratio = fastest(100_000) / fastest(25_000);
-    assert.ok(ratio < 6, `four times the backslashes took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio((backslashes) => build(backslashes)[1], 100_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the backslashes took ${ratio.toFixed(2)} times as long`);
   });
 });
 
@@ -1977,11 +2081,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     };
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    // As for the backslash runs above, the times at two lengths four times apart are compared, each the
-    // fastest of ten checks.
-    const fastest = (words) => Math.min(...Array.from({ length: 10 }, () => check(words)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the words took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the words took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a command is pinned when its words are separated by more than one space or a tab', () => {
@@ -2075,9 +2176,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.ok(short < 1000, `checked 30 words in ${Math.round(short)} ms`);
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    const fastest = (words) => Math.min(...Array.from({ length: 10 }, () => check(words)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the words took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the words took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a command at the end of a line is pinned when the line ends with CR LF', () => {
@@ -2160,9 +2260,8 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
     };
     const elapsed = read(20_000);
     assert.ok(elapsed < 1000, `read in ${Math.round(elapsed)} ms`);
-    const fastest = (spans) => Math.min(...Array.from({ length: 10 }, () => read(spans)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the spans took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(read, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the spans took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a sentence passes when still exits 1, as whole words, follows the words about hiding the finding', () => {
@@ -2187,9 +2286,8 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
     };
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    const fastest = (repeats) => Math.min(...Array.from({ length: 10 }, () => check(repeats)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the repeats took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the repeats took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
@@ -2257,18 +2355,25 @@ const HASH_NOTE_SECTIONS = [
 // Returns the text under the heading line `heading` in a markdown `text`: the lines after the first such
 // line, up to the next heading of the same or a higher level or to the end of the text, so a section keeps
 // its subsections. `heading` is the whole line, with its # marks. A line inside a fenced code block is not
-// a heading, so a # comment in a shell example neither starts nor ends a section. Returns undefined when
-// the text has no such heading. A line ends at LF or CR LF.
+// a heading, so a # comment in a shell example neither starts nor ends a section. Fences are read as in
+// CommonMark: a fence opens on three or more backticks or tildes indented at most three spaces, where a
+// backtick fence's info string has no backtick, and closes on a line of the same character, at least as
+// long, with nothing after it but spaces or tabs. A line indented four or more spaces opens no fence.
+// Returns undefined when the text has no such heading. A line ends at LF or CR LF.
 function docSection(text, heading) {
   const level = heading.match(/^#+/)[0].length;
   let fence = null;
   let section;
   for (const line of text.split(/\r?\n/)) {
-    const marker = line.match(/^\s*(```|~~~)/);
-    if (marker) {
-      if (fence === null) fence = marker[1];
-      else if (fence === marker[1]) fence = null;
-    } else if (fence === null) {
+    if (fence !== null) {
+      const close = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/)?.[1];
+      if (close?.[0] === fence[0] && close.length >= fence.length) fence = null;
+    } else {
+      const open = line.match(/^ {0,3}(`{3,}|~{3,})(.*)/);
+      if (open && !(open[1][0] === '`' && open[2].includes('`'))) fence = open[1];
+    }
+    // The line that closes a fence starts with ` or ~ after its spaces, so it is not a heading either.
+    if (fence === null) {
       const marks = line.match(/^(#{1,6}) /)?.[1];
       if (section && marks && marks.length <= level) break;
       if (!section && line.trimEnd() === heading) {
@@ -2572,9 +2677,8 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     };
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    const fastest = (commands) => Math.min(...Array.from({ length: 10 }, () => check(commands)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the commands took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the commands took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a guard sign command at the end of a line is followed by --files when the line ends with CR LF', () => {
@@ -2847,6 +2951,41 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       docSection(text, '## Signing'),
       '```bash\n# Sign after review and approval\nnpx --yes opena2a-cli@latest guard sign --files SOUL.md\n```\nThe record is a hash.',
     );
+  });
+
+  // A shorter fence or a fence of the other character inside a block does not close it, so a # line further
+  // in is not a heading. A line indented four or more spaces is an indented code block, not a fence, so the
+  // next heading still ends the section and the hash sentence under it is not read as part of it.
+  test('reads a code fence as CommonMark does: a block closes only on a fence of the same character at least as long, and an indented line opens none', () => {
+    const indented = docSection(
+      '## Soul Integrity\nSign it.\n    ```\n## Other\nThe record is a hash, not a keyed signature.',
+      '## Soul Integrity',
+    );
+    assert.equal(indented, 'Sign it.\n    ```');
+    assert.doesNotMatch(indented, HASH_NOTE);
+    const lines = [
+      '## Example',
+      '````markdown',
+      '```bash',
+      '# A comment, not a heading',
+      '```',
+      '~~~',
+      '## Not a heading',
+      '````js',
+      '`````',
+      'After the block.',
+      '   ~~~',
+      '## Not a heading either',
+      '~~~~ ',
+      '```not a fence`',
+      '## Next',
+      'Next text.',
+    ];
+    const text = lines.join('\n');
+    assert.equal(docSection(text, '## Example'), lines.slice(1, 14).join('\n'));
+    assert.equal(docSection(text, '## Not a heading'), undefined);
+    assert.equal(docSection(text, '## Not a heading either'), undefined);
+    assert.equal(docSection(text, '## Next'), 'Next text.');
   });
 
   // A document that tells a reader to sign in one section and says what the record is in another has the
