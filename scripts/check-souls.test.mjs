@@ -902,6 +902,26 @@ describe('command line', () => {
     });
   }
 
+  // These run main with each path separator, so both lines that name a --root directory that does not
+  // exist, its problem line and the summary line, are checked the Windows way and the other way on every
+  // platform. The directory is beside the working directory, so it is named by its absolute path.
+  for (const [separator, escape] of [
+    ['\\', (path) => path],
+    ['/', (path) => path.replaceAll('\\', '\\\\')],
+  ]) {
+    test(`prints a --root directory that does not exist as a path when the path separator is ${separator}`, (t) => {
+      t.mock.method(process, 'cwd', () => elsewhere);
+      const log = t.mock.method(console, 'log', () => {});
+      const missing = join(`${elsewhere}-missing`, 'no\\such\u{202e}dir');
+      const shown = escape(missing).replace('\u{202e}', '\\u{202e}');
+      assert.equal(main(['--root', missing], { separator }), 1);
+      assert.deepEqual(
+        log.mock.calls.map((call) => call.arguments[0]),
+        [`${shown}: directory not found`, `Checked 0 files in ${shown} against 0 rules from CONTRIBUTING.md: 1 problem.`],
+      );
+    });
+  }
+
   for (const args of [['--root'], ['--root', '--help'], ['--root', '-h']]) {
     test(`${args.join(' ')} reports the missing directory and exits 2`, () => {
       const { status, stdout, stderr } = run(args);
@@ -1250,8 +1270,14 @@ describe('command line', () => {
 // run of spaces and tabs, and NPX_PINNED does too. NPX_PACKAGE also separates words by other
 // whitespace, such as a no-break space, and by the next line character U+0085 and the zero width
 // space U+200B, which \s does not match, so a command whose words are joined by one is still checked,
-// and is reported as not pinned.
-const NPX_PACKAGE = /^[\s\u{85}\u{200b}]+(?:-[^\s\u{85}\u{200b}]*[\s\u{85}\u{200b}]+)*(?:hackmyagent|opena2a-cli)\b/u;
+// and is reported as not pinned. A word joined to an option word by such characters alone, with no space
+// or tab between them, is part of that option word to the shell, so NPX_PACKAGE reads it both ways: as
+// part of the option, so that `npx -x<U+200B>y hackmyagent` is checked as running hackmyagent, and as
+// the package, so that `npx --yes<U+200B>hackmyagent@latest` is too. A word that starts with - is read
+// as an option either way, so each word is read one way only and a long run of them is read in linear
+// time.
+const NPX_PACKAGE =
+  /^[\s\u{85}\u{200b}]+(?:-[^\s\u{85}\u{200b}]*(?:(?:(?![ \t])[\s\u{85}\u{200b}])+[^-\s\u{85}\u{200b}][^\s\u{85}\u{200b}]*)*[\s\u{85}\u{200b}]+)*(?:hackmyagent|opena2a-cli)\b/u;
 const NPX_PINNED = /^[ \t]+--yes[ \t]+(?:hackmyagent|opena2a-cli)@latest(?=[ \t`]|\.(?!\w)|$)/;
 
 // The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
@@ -1411,6 +1437,49 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
+  test('a command is not pinned when an option word holds whitespace the shell does not split on', () => {
+    // The shell reads -x<U+200B>y as one option word, so the first five commands run the package after it.
+    // In the last two, a space separates y from -x, so y is the package.
+    const text = [
+      'npx -x\u{200b}y hackmyagent secure .',
+      'npx -x\u{85}y hackmyagent secure .',
+      'npx -x\u{a0}y opena2a-cli guard verify',
+      'npx --yes\u{200b}foo hackmyagent@latest secure .',
+      'npx --yes\u{85}-x hackmyagent@latest secure .',
+      'npx -x \u{200b}y hackmyagent secure .',
+      'npx -x\u{200b} y hackmyagent secure .',
+    ].join('\n');
+    assert.deepEqual(unpinnedNpxCommands('a.md', text), [
+      'a.md:1: npx -x\u{200b}y hackmyagent secure .',
+      'a.md:2: npx -x\u{85}y hackmyagent secure .',
+      'a.md:3: npx -x\u{a0}y opena2a-cli guard verify',
+      'a.md:4: npx --yes\u{200b}foo hackmyagent@latest secure .',
+      'a.md:5: npx --yes\u{85}-x hackmyagent@latest secure .',
+    ]);
+  });
+
+  test('checks a long run of option words joined by zero width spaces in linear time', () => {
+    // Returns the time taken to check `npx`, the given number of option words joined by U+200B, and a last
+    // word that is not a package. An option word pattern that can also take U+200B, as -\S* can, divides
+    // such a run in more ways for each word: with -\S* as the option word of NPX_PACKAGE, 32 words took
+    // about 40 seconds with Node.js v26.7.0 on an Apple M4 Max.
+    const check = (words) => {
+      const line = `npx ${'-a\u{200b}'.repeat(words)}x`;
+      const start = performance.now();
+      assert.deepEqual(unpinnedNpxCommands('a.md', line), []);
+      return performance.now() - start;
+    };
+    // A short run first, so that a check whose time doubles with each word fails here rather than running
+    // for ever on the long runs below.
+    const short = check(30);
+    assert.ok(short < 1000, `checked 30 words in ${Math.round(short)} ms`);
+    const elapsed = check(20_000);
+    assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+    const fastest = (words) => Math.min(...Array.from({ length: 10 }, () => check(words)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the words took ${ratio.toFixed(2)} times as long`);
+  });
+
   test('a command at the end of a line is pinned when the line ends with CR LF', () => {
     const text = 'npx --yes hackmyagent@latest\r\nnpx hackmyagent secure .\r\n';
     assert.deepEqual(unpinnedNpxCommands('a.md', text), ['a.md:2: npx hackmyagent secure .']);
@@ -1432,14 +1501,18 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 // opena2a-cli guard sign reads a word after `sign` as the directory to search for config files, and the
 // search skips SOUL.md, so in a directory holding only SOUL.md, `guard sign SOUL.md` and `guard sign`
 // sign nothing. It signs the files named after --files.
-// GUARD_SIGN_FILES separates words by spaces and tabs, as the shell does, so --files must be followed by
-// a space, a tab or the end of the command to be a word of its own. GUARD_SIGN also separates words by
-// other whitespace, such as a no-break space, and by the next line character U+0085 and the zero width
-// space U+200B, which \s does not match, so a command whose words are joined by one is still checked,
-// and is reported even when --files follows. GUARD_SIGN reads the rest of a command in a lookahead, so
-// a later `guard sign` on the same line, as after ; or |, is matched and checked too.
-const GUARD_SIGN = /\bguard([\s\u{85}\u{200b}]+)sign\b(?=([^`#&\n]*))/gu;
-const GUARD_SIGN_FILES = /^[ \t]+--files(?![^ \t])/;
+// GUARD_SIGN_FILES separates words by spaces and tabs, as the shell does. --files is a word of its own
+// when it is followed by a space, a tab, the end of the command (a backtick, a #, & or the end of the
+// line), or by ;, | or ), which end a word in the shell. A period after --files ends a sentence of prose
+// unless a word character follows it, as in --files.md, which is another word. --files=<file> names its
+// file as `--files <file>` does. GUARD_SIGN also separates words by other whitespace, such as a no-break
+// space, and by the next line character U+0085 and the zero width space U+200B, which \s does not
+// match, so a command whose words are joined by one is still checked, and is reported even when --files
+// follows. GUARD_SIGN_FILES is tested at the position after each `sign` and reads only the start of the
+// text there, so a line with many `guard sign` commands is checked in linear time, and a later
+// `guard sign` on the same line, as after ; or |, is matched and checked too.
+const GUARD_SIGN = /\bguard([\s\u{85}\u{200b}]+)sign\b/gu;
+const GUARD_SIGN_FILES = /[ \t]+--files(?=[ \t`#&;|)=]|\.(?!\w)|$)/y;
 
 // Where opena2a-cli guard sign writes its signatures.
 const GUARD_DIR = '.opena2a/guard/';
@@ -1451,22 +1524,25 @@ const GUARD_STORE = `${GUARD_DIR}signatures.json`;
 // CR LF.
 function unnamedGuardSigns(file, text) {
   return text.split(/\r?\n/).flatMap((line, index) => {
-    const unnamed = [...line.matchAll(GUARD_SIGN)].some(
-      ([, separator, rest]) => !/^[ \t]+$/.test(separator) || !GUARD_SIGN_FILES.test(rest),
-    );
+    const unnamed = [...line.matchAll(GUARD_SIGN)].some((match) => {
+      GUARD_SIGN_FILES.lastIndex = match.index + match[0].length;
+      return !/^[ \t]+$/.test(match[1]) || !GUARD_SIGN_FILES.test(line);
+    });
     return unnamed ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
 }
 
 // Returns the words after `npx --yes opena2a-cli@latest` in each distinct guard sign and guard verify
-// command in the texts. A command ends at a backtick, a # comment, && or the end of its line, which ends at
-// LF or CR LF. Its words are separated by spaces and tabs only, as the shell separates them, so the opt-in
-// run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as one word, as a shell would.
+// command in the texts. A command ends at a backtick, a # comment, &&, ;, | or the end of its line, which
+// ends at LF or CR LF. Its words are separated by spaces and tabs only, as the shell separates them, so the
+// opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as one word, as a shell would.
+// Quotes are not read: `--files "a b.md"` is read as the words `"a` and `b.md"`, so a test checks that no
+// command in the docs quotes a word.
 function guardCommands(texts) {
   const commands = new Map();
   for (const [, text] of texts) {
     for (const line of text.split(/\r?\n/)) {
-      const matches = line.matchAll(/npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b[^`#&]*)/g);
+      const matches = line.matchAll(/npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b[^`#&;|]*)/g);
       for (const [, command] of matches) {
         const words = command.split(/[ \t]+/).filter((word) => word !== '');
         commands.set(words.join(' '), words);
@@ -1651,6 +1727,43 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
+  test('--files is a word of its own before ;, |, ), = or a sentence period, and not before other characters', () => {
+    const text = [
+      'Use guard sign --files.',
+      '(guard sign --files)',
+      'guard sign --files; ls',
+      'guard sign --files|cat',
+      'npx --yes opena2a-cli@latest guard sign --files=SOUL.md',
+      'guard sign --files.md',
+      'guard sign --filesystem SOUL.md',
+      'guard sign --files-from list.txt',
+      'Sign them with guard sign --files, followed by their paths.',
+    ].join('\n');
+    assert.deepEqual(unnamedGuardSigns('a.md', text), [
+      'a.md:6: guard sign --files.md',
+      'a.md:7: guard sign --filesystem SOUL.md',
+      'a.md:8: guard sign --files-from list.txt',
+      'a.md:9: Sign them with guard sign --files, followed by their paths.',
+    ]);
+  });
+
+  test('checks a long line of guard sign commands in linear time', () => {
+    // Returns the time taken to check a line of the given number of `guard sign --files` commands. Reading
+    // the rest of the line after each `sign` took about 2.3 seconds for 20,000 commands, a 380 KB line, with
+    // Node.js v26.7.0 on an Apple M4 Max.
+    const check = (commands) => {
+      const line = 'guard sign --files '.repeat(commands);
+      const start = performance.now();
+      assert.deepEqual(unnamedGuardSigns('a.md', line), []);
+      return performance.now() - start;
+    };
+    const elapsed = check(20_000);
+    assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+    const fastest = (commands) => Math.min(...Array.from({ length: 10 }, () => check(commands)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the commands took ${ratio.toFixed(2)} times as long`);
+  });
+
   test('a guard sign command at the end of a line is followed by --files when the line ends with CR LF', () => {
     const text = 'Then run npx --yes opena2a-cli@latest guard sign --files\r\nnpx --yes opena2a-cli@latest guard sign SOUL.md\r\n';
     assert.deepEqual(unnamedGuardSigns('a.md', text), ['a.md:2: npx --yes opena2a-cli@latest guard sign SOUL.md']);
@@ -1692,10 +1805,27 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
+  test('ends a guard command at ; or |', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md; npx --yes opena2a-cli@latest guard verify',
+      'npx --yes opena2a-cli@latest guard verify | tee verify.log',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md|cat',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'sign', '--files', 'SOUL.md'],
+      ['guard', 'verify'],
+    ]);
+  });
+
   test('every guard sign command is followed by --files, and one signs SOUL.md and one verifies it', () => {
     const texts = docTexts();
     assert.deepEqual(texts.flatMap(([file, text]) => unnamedGuardSigns(file, text)), []);
     const commands = guardCommands(texts);
+    assert.deepEqual(
+      commands.flatMap((words) => words.filter((word) => /["']/.test(word))),
+      [],
+      'a guard command in README.md, CONTRIBUTING.md or the guides quotes a word, and guardCommands does not read quotes',
+    );
     assert.ok(
       commands.some((words) => words[1] === 'sign' && words.includes('SOUL.md')),
       'no npx opena2a-cli guard sign --files SOUL.md command found in README.md, CONTRIBUTING.md or the guides',
