@@ -1503,16 +1503,17 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 // sign nothing. It signs the files named after --files.
 // GUARD_SIGN_FILES separates words by spaces and tabs, as the shell does. --files is a word of its own
 // when it is followed by a space, a tab, the end of the command (a backtick, a #, & or the end of the
-// line), or by ;, | or ), which end a word in the shell. A period after --files ends a sentence of prose
-// unless a word character follows it, as in --files.md, which is another word. --files=<file> names its
-// file as `--files <file>` does. GUARD_SIGN also separates words by other whitespace, such as a no-break
+// line), or by ;, |, (, ), < or >, which end a word in the shell. A period after --files ends a sentence
+// of prose when a space, a tab or the end of the line follows it; otherwise the shell reads it as part of
+// another word, as in --files.md, --files... or --files. followed by a no-break space. --files=<file>
+// names its file as `--files <file>` does. GUARD_SIGN also separates words by other whitespace, such as a no-break
 // space, and by the next line character U+0085 and the zero width space U+200B, which \s does not
 // match, so a command whose words are joined by one is still checked, and is reported even when --files
 // follows. GUARD_SIGN_FILES is tested at the position after each `sign` and reads only the start of the
 // text there, so a line with many `guard sign` commands is checked in linear time, and a later
 // `guard sign` on the same line, as after ; or |, is matched and checked too.
 const GUARD_SIGN = /\bguard([\s\u{85}\u{200b}]+)sign\b/gu;
-const GUARD_SIGN_FILES = /[ \t]+--files(?=[ \t`#&;|)=]|\.(?!\w)|$)/y;
+const GUARD_SIGN_FILES = /[ \t]+--files(?=[ \t`#&;|()<>=]|\.(?=[ \t]|$)|$)/y;
 
 // Where opena2a-cli guard sign writes its signatures.
 const GUARD_DIR = '.opena2a/guard/';
@@ -1730,7 +1731,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
-  test('--files is a word of its own before ;, |, ), = or a sentence period, and not before other characters', () => {
+  test('--files is a word of its own before ;, |, (, ), <, >, = or a sentence period, and not before other characters', () => {
     const text = [
       'Use guard sign --files.',
       '(guard sign --files)',
@@ -1741,12 +1742,21 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       'guard sign --filesystem SOUL.md',
       'guard sign --files-from list.txt',
       'Sign them with guard sign --files, followed by their paths.',
+      'guard sign --files<list.txt',
+      'guard sign --files>sign.log',
+      'guard sign --files(SOUL.md)',
+      'Use guard sign --files. Then name the files.',
+      'Use guard sign --files.\tThen name the files.',
+      'Use guard sign --files...',
+      'Use guard sign --files.\u{a0}Then name the files.',
     ].join('\n');
     assert.deepEqual(unnamedGuardSigns('a.md', text), [
       'a.md:6: guard sign --files.md',
       'a.md:7: guard sign --filesystem SOUL.md',
       'a.md:8: guard sign --files-from list.txt',
       'a.md:9: Sign them with guard sign --files, followed by their paths.',
+      'a.md:15: Use guard sign --files...',
+      'a.md:16: Use guard sign --files.\u{a0}Then name the files.',
     ]);
   });
 
