@@ -103,6 +103,39 @@ function templateSouls() {
   return [...templates, ['the Minimal Template in the guide', minimal]];
 }
 
+// The README.md tables whose last column names the standards and regulations each soul covers.
+const STANDARDS_TABLES = ['By Industry', 'By Organization Type'];
+
+// Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
+// one problem for each name in it that the soul the row links to does not mention, and the number of
+// names read. A name is a word of that column that contains a digit or two capital letters, such as
+// GLBA, 62443 or FedRAMP; a phrase with no such word, such as attorney-client privilege, is not read.
+// `readSoul` returns the text of a file the README links to.
+function unmentionedStandards(readme, readSoul) {
+  const problems = [];
+  let names = 0;
+  let table = null;
+  for (const line of readme.split(/\r?\n/)) {
+    const heading = line.match(/^## (.*)/);
+    if (heading) {
+      table = STANDARDS_TABLES.find((name) => heading[1] === name || heading[1].startsWith(`${name} `)) ?? null;
+      continue;
+    }
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    const link = table && cells[0]?.match(/^\[[^\]]*\]\(([^)]+)\)$/);
+    if (!link) continue;
+    const soul = readSoul(link[1]);
+    for (const name of cells.at(-1).split(/[\s,/]+/).filter((word) => /\d|[A-Z].*[A-Z]/.test(word))) {
+      names += 1;
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (!new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i').test(soul)) {
+        problems.push(`${link[1]}: the README.md ${table} table names ${name}, which the soul does not mention`);
+      }
+    }
+  }
+  return { problems, names };
+}
+
 // Runs `<command> scan-soul <dir> --json` on each soul, saved as SOUL.md in a temporary directory,
 // and returns one line per problem. A scan that runs longer than `timeout` milliseconds is stopped, and
 // no later soul is scanned.
@@ -227,6 +260,13 @@ describe('this repository', () => {
     },
   );
 
+  test('every soul mentions each standard and regulation its README.md table row names', () => {
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const { problems, names } = unmentionedStandards(readme, (path) => readFileSync(join(repoRoot, path), 'utf8'));
+    assert.deepEqual(problems, []);
+    assert.ok(names > 0, 'no standard or regulation names were read from the README.md tables');
+  });
+
   test('CONTRIBUTING.md says whether pull requests run CI, matching the repository', () => {
     const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
     const hasWorkflows = existsSync(join(repoRoot, '.github', 'workflows'));
@@ -259,6 +299,43 @@ describe('this repository', () => {
       assert.deepEqual(scanSoulProblems(HACKMYAGENT, templateSouls()), []);
     },
   );
+});
+
+describe('unmentionedStandards', () => {
+  const readme = [
+    '## By Industry (2 souls)',
+    '',
+    '| Soul | Focus | Key Standards and Regulations |',
+    '|------|-------|-------------------------------|',
+    '| [fintech](souls/fintech.md) | Payments | PCI-DSS, KYC/AML, GLBA |',
+    '| [plant](souls/plant.md) | OT systems | IEC 62443, OSHA reporting requirements |',
+    '',
+    '## By Role (1 soul)',
+    '',
+    '| Soul | Focus |',
+    '|------|-------|',
+    '| [writer](souls/writer.md) | SEO copy |',
+  ].join('\n');
+  const souls = {
+    'souls/fintech.md': 'Covers pci-dss, KYC and AML.',
+    'souls/plant.md': 'Cites IEC 62264, IEC 624430 and OSHA.',
+    'souls/writer.md': '',
+  };
+
+  test('reports each name the linked soul does not mention, and none from a table it does not read', () => {
+    assert.deepEqual(unmentionedStandards(readme, (path) => souls[path]), {
+      problems: [
+        'souls/fintech.md: the README.md By Industry table names GLBA, which the soul does not mention',
+        'souls/plant.md: the README.md By Industry table names 62443, which the soul does not mention',
+      ],
+      names: 7,
+    });
+  });
+
+  test('accepts a soul that mentions every name', () => {
+    const covered = { ...souls, 'souls/fintech.md': 'PCI-DSS, KYC, AML and GLBA.', 'souls/plant.md': 'IEC 62443, OSHA.' };
+    assert.deepEqual(unmentionedStandards(readme, (path) => covered[path]).problems, []);
+  });
 });
 
 // A directory a suite's tests share is created in a `before` hook: a test run filtered by name runs
