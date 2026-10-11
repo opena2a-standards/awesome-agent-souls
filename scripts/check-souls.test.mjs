@@ -1884,7 +1884,7 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
   });
 });
 
-// hackmyagent secure --ignore <check> keeps a finding out of the Findings list and changes nothing else:
+// hackmyagent secure --ignore <check> keeps a finding out of the Findings list and does not clear it:
 // the report still counts the finding in its severity totals, its categories and its verdict, and the
 // command still exits 1. IGNORE_SENTENCE is a sentence that starts at an inline code span naming the
 // option, up to its period.
