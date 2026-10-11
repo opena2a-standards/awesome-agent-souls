@@ -3417,21 +3417,50 @@ describe('this test file', () => {
     assert.deepEqual(shortCommentLines(readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/)), []);
   });
 
-  // A line that compares `ratio` with a bound, as the first argument of `assert.ok` on that line or on a
-  // line of its own. The group holds the bound.
-  const RATIO_BOUND = /^\s*(?:assert\.ok\()?ratio < ([^,]*),/;
+  // A line that sets a name, as `const` or `let` does. The groups hold the name and what the line sets it
+  // to. A line that ends with `=` sets it to the lines after it, up to the one that ends with a semicolon.
+  const SETS_NAME = /^\s*(?:const|let) (\w+) =(.*)$/;
 
-  // Returns one line for each line in `lines` that sets `ratio` without a call of timeRatio, or that compares
-  // it with a bound other than LINEAR_TIME_RATIO. A linear time test that divides two times of its own, or
-  // has a bound of its own, is reported so that it compares the sizes and the bound that the comment on
-  // LINEAR_TIME_RATIO gives the reasons for.
-  function ownTimeRatios(lines) {
+  // A division by a value that is not a number, as a time ratio divides one time by another. Dividing by a
+  // number, as `size / 16` does, gives a size or a time, not a ratio.
+  const DIVIDES_BY_VALUE = /\s\/\s+[^\d\s]/;
+
+  // A line that compares a name with a bound, as the first argument of `assert.ok` on that line or on a
+  // line of its own. The groups hold the name and the bound.
+  const NAME_BOUND = /^\s*(?:assert\.ok\()?(\w+) < ([^,]*),/;
+
+  // Returns the index of each line in `lines` that sets a name to a time ratio, with the name and what the
+  // line sets it to. A name is set to a time ratio when it is `ratio`, or when what it is set to calls
+  // timeRatio or divides by a value that is not a number, whatever the name: this file divides nothing
+  // else that way.
+  function timeRatioLines(lines) {
     return lines.flatMap((line, index) => {
-      if (/^\s*(?:const|let) ratio = (?!timeRatio\()/.test(line)) {
+      const [, name, rest] = SETS_NAME.exec(line) ?? [];
+      if (name === undefined) return [];
+      const parts = [rest];
+      if (rest.trim() === '') {
+        const end = lines.findIndex((other, at) => at > index && /;\s*$/.test(other));
+        parts.push(...lines.slice(index + 1, end + 1));
+      }
+      const value = parts.map((part) => part.trim()).join(' ');
+      const setsRatio = name === 'ratio' || /\btimeRatio\(/.test(value) || DIVIDES_BY_VALUE.test(value);
+      return setsRatio ? [{ index, name, value }] : [];
+    });
+  }
+
+  // Returns one line for each line in `lines` that sets a time ratio without a call of timeRatio, or that
+  // compares a name set to one with a bound other than LINEAR_TIME_RATIO. A linear time test that divides
+  // two times of its own, or has a bound of its own, is reported under any name so that it compares the
+  // sizes and the bound that the comment on LINEAR_TIME_RATIO gives the reasons for.
+  function ownTimeRatios(lines) {
+    const ratios = timeRatioLines(lines);
+    const names = new Set(ratios.map(({ name }) => name));
+    return lines.flatMap((line, index) => {
+      if (ratios.some((ratio) => ratio.index === index && !ratio.value.startsWith('timeRatio('))) {
         return [`line ${index + 1} sets a time ratio without timeRatio`];
       }
-      const bound = RATIO_BOUND.exec(line)?.[1];
-      if (bound !== undefined && bound !== 'LINEAR_TIME_RATIO') {
+      const [, name, bound] = NAME_BOUND.exec(line) ?? [];
+      if (names.has(name) && bound !== 'LINEAR_TIME_RATIO') {
         return [`line ${index + 1} compares a time ratio with ${bound}, not LINEAR_TIME_RATIO`];
       }
       return [];
@@ -3454,10 +3483,34 @@ describe('this test file', () => {
     ]);
   });
 
+  test('reports a time ratio under any name, set on one line or on the lines after it', () => {
+    const lines = [
+      '    const quotient = Math.min(...Array.from({ length: 10 }, () => read(words, repeats))) / Math.min(...Array.from({ length: 10 }, () => read(words, repeats / 4)));',
+      "    assert.ok(quotient < 6, '');",
+      '    const slower =',
+      '      fastest(repeats) /',
+      '      fastest(repeats / 4);',
+      '      slower < LINEAR_TIME_RATIO * 2,',
+      '    const factor = timeRatio(check, 32_000);',
+      '    assert.ok(factor < 6, `sixteen times the repeats took too long`);',
+      '    const smaller = repeats / 16;',
+      '    assert.ok(smaller < 6, `too many repeats`);',
+      '    assert.ok(elapsed < 1000, `checked in too long`);',
+    ];
+    assert.deepEqual(ownTimeRatios(lines), [
+      'line 1 sets a time ratio without timeRatio',
+      'line 2 compares a time ratio with 6, not LINEAR_TIME_RATIO',
+      'line 3 sets a time ratio without timeRatio',
+      'line 6 compares a time ratio with LINEAR_TIME_RATIO * 2, not LINEAR_TIME_RATIO',
+      'line 8 compares a time ratio with 6, not LINEAR_TIME_RATIO',
+    ]);
+  });
+
   test('every time ratio is set with timeRatio and compared with LINEAR_TIME_RATIO', () => {
     const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
     assert.deepEqual(ownTimeRatios(lines), []);
     // With no comparison in the file, the check above would have checked nothing.
-    assert.ok(lines.some((line) => RATIO_BOUND.test(line)), 'no comparison of a time ratio was found');
+    const names = new Set(timeRatioLines(lines).map(({ name }) => name));
+    assert.ok(lines.some((line) => names.has(NAME_BOUND.exec(line)?.[1])), 'no comparison of a time ratio was found');
   });
 });
