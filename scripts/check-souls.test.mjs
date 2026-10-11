@@ -31,6 +31,13 @@ import { checkRepository, main, readRules, readSections } from './check-souls.mj
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// git sets GIT_DIR, and for some commits GIT_INDEX_FILE, in the environment of a hook it runs. Such a
+// variable makes git use the repository it names in place of the one found from the directory git runs
+// in, and these tests run git, directly and through the checks, in temporary directories. So the
+// variables git lists as local to a repository are removed before any test runs.
+const localGitVariables = spawnSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' }).stdout ?? '';
+for (const name of localGitVariables.split('\n').filter(Boolean)) delete process.env[name];
+
 // Splits HACKMYAGENT into words. A value that names an existing file is one word, so a scanner's path
 // may contain spaces; otherwise words are separated by spaces, and a quoted word may contain them.
 function scannerCommand(value) {
@@ -932,6 +939,29 @@ describe('command line', () => {
       assert.equal(stderr, '');
     });
   }
+
+  // Spreading a directory's list of files into push overflows the stack from about 125,000 files. With a
+  // stack of 200 KB in place of the default of about 1 MB, 50,000 files are well past that point.
+  test('lists a directory of more files than fit on the stack as the arguments of one call', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-many-'));
+    try {
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE);
+      const dir = join(root, 'souls', 'by-role', 'x');
+      mkdirSync(dir, { recursive: true });
+      for (let i = 0; i < 50000; i++) writeFileSync(join(dir, `${i}.md`), '');
+      const { status, stdout, stderr } = spawnSync(process.execPath, ['--stack-size=200', script, '--root', root], {
+        cwd: elsewhere,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      assert.equal(stderr, '');
+      assert.equal(status, 1);
+      assert.match(stdout, /^souls\/by-role\/x\/49999\.md: not at any location listed in CONTRIBUTING\.md$/m);
+      assert.match(stdout, /^Checked 50000 files in /m);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   test('an unknown argument prints usage to stderr and exits 2', () => {
     const { status, stderr } = run(['--bogus']);
@@ -2324,6 +2354,32 @@ describe('this test file', () => {
       rmSync(temp, { recursive: true, force: true });
     }
   });
+
+  test(
+    'the notAGitClone tests pass when the environment names another repository, as it does in a git hook',
+    { skip: !GIT_RUNS && 'git did not run' },
+    () => {
+      const other = mkdtempSync(join(tmpdir(), 'check-souls-hook-'));
+      try {
+        assert.equal(spawnSync('git', ['init', '--quiet'], { cwd: other }).status, 0);
+        const gitDir = join(other, '.git');
+        const { NODE_TEST_CONTEXT, ...env } = process.env;
+        const { status, stdout } = spawnSync(
+          process.execPath,
+          ['--test', '--test-reporter=tap', '--test-name-pattern=^notAGitClone ', fileURLToPath(import.meta.url)],
+          {
+            encoding: 'utf8',
+            env: { ...env, GIT_DIR: gitDir, GIT_WORK_TREE: other, GIT_INDEX_FILE: join(gitDir, 'index') },
+          },
+        );
+        assert.equal(status, 0, stdout);
+        assert.match(stdout, /^ok \d+ - notAGitClone$/m);
+        assert.match(stdout, /^# pass [1-9]/m);
+      } finally {
+        rmSync(other, { recursive: true, force: true });
+      }
+    },
+  );
 
   // Returns one line for each line of a comment in `lines` that ends inside a sentence and is less than half
   // as wide as the widest line of its comment. A comment is a run of // lines with the same indentation. A

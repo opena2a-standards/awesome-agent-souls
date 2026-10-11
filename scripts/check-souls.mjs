@@ -210,26 +210,32 @@ function couldContain(dir, pattern) {
   );
 }
 
-// Lists the .md files under `dir`. A directory that cannot be read adds a problem and is added to
-// `unreadable`.
+// Lists the .md files under `dir`, sorted. A directory that cannot be read adds a problem and is added
+// to `unreadable`.
 function listMarkdownFiles(root, dir, problems, unreadable) {
+  const files = [];
+  addMarkdownFiles(root, dir, files, problems, unreadable);
+  return files.sort();
+}
+
+// Adds the .md files under `dir` to `files`. Every directory adds to the one array: spreading the list of
+// a directory of about 125,000 files or more into push overflows the stack.
+function addMarkdownFiles(root, dir, files, problems, unreadable) {
   let entries;
   try {
     entries = readdirSync(join(root, dir), { withFileTypes: true });
   } catch (error) {
-    if (error.code === 'ENOENT') return [];
+    if (error.code === 'ENOENT') return;
     problems.push(cannotRead(dir, error));
     unreadable.push(dir);
-    return [];
+    return;
   }
-  const files = [];
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     const path = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) files.push(...listMarkdownFiles(root, path, problems, unreadable));
+    if (entry.isDirectory()) addMarkdownFiles(root, path, files, problems, unreadable);
     else if (entry.isFile() && entry.name.endsWith('.md')) files.push(path);
   }
-  return files.sort();
 }
 
 // `name` is how a problem with the root itself names it, for example as the summary line names it.

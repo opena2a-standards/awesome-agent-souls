@@ -103,7 +103,8 @@ export function findProseProblems(text) {
         found.push({ line: index + 1, column: match.index + 1, problem: name(match) });
       }
     }
-    // One push per problem: spreading a line of over a hundred thousand dashes into push overflows the stack.
+    // One push per problem: spreading the problems of a line of about 125,000 dashes or more into push
+    // overflows the stack.
     for (const problem of found.sort((a, b) => a.column - b.column)) problems.push(problem);
   }
   return problems;
@@ -154,7 +155,8 @@ const HELP = `${USAGE}
 Checks the prose of every .md and .mdx file git tracks in this repository.
 Prints file:line:column for each double hyphen, em dash or en dash used as
 a dash, and for each heading named "Why this exists" or "Why this matters".
-Fenced code blocks and inline code are not checked. CHANGELOG.md, LICENSE
+Fenced code blocks and inline code are not checked. CHANGELOG.md,
+CHANGELOG.mdx, changelog fragments under a changelog.d directory, LICENSE
 files and files under a directory of installed, generated or test files,
 such as node_modules or fixtures, are not checked.
 
