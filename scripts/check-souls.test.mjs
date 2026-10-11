@@ -3417,22 +3417,35 @@ describe('this test file', () => {
     assert.deepEqual(shortCommentLines(readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/)), []);
   });
 
-  // The code of a line that sets a name, as `const`, `let`, an assignment or a compound assignment such as
-  // `/=` does, and not a comparison or an arrow function, whose parameter comes before `=>`. The groups
-  // hold what the line sets, a name or the array or object of names that a destructuring set sets, the
-  // sign of a compound assignment, and what the line sets it to, which runs on to the first line from this
-  // one on whose code ends with a semicolon.
-  const SETS_NAME =
-    /^\s*(?:(?:const|let) )?(\w+|\[[^()]*?\]|\{[^()]*?\})\s*(\*\*|>>>|<<|>>|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>])(.*)$/;
+  // The code of a line that sets a name, as `const`, `let`, `var`, an assignment or a compound assignment
+  // such as `/=` does, and not a comparison or an arrow function, whose parameter comes before `=>`. The
+  // groups hold the name, the sign of a compound assignment and the code after `=` on the line.
+  const SETS_NAME = /^\s*(?:(?:const|let|var) )?(\w+)\s*(\*\*|>>>|<<|>>|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>])(.*)$/;
 
-  // A name that a destructuring set sets: one that a comma, a closing bracket or `=` follows, and not a key,
-  // which a colon follows.
-  const PATTERN_NAME = /(?<![\w$])[A-Za-z_$][\w$]*(?![\w$])(?=\s*(?:[,\]}=]|$))/g;
+  // The code of a line that adds one to a name or takes one from it, as `ratio--;` or `++ratio;` does. The
+  // groups hold the sign and the name, in the order that the line gives them.
+  const STEPS_NAME = /^\s*(?:(\+|-)\1\s*(\w+)|(\w+)\s*(\+|-)\4)/;
+
+  // The start of the code of a line that sets the names of an array or object by destructuring, up to its
+  // opening bracket: `const`, `let`, `var` or the round bracket that a destructuring assignment takes, if any.
+  const DESTRUCTURES = /^\s*(?:(?:const|let|var) |\(\s*)?(?=[[{])/;
+
+  // The head of an `if`, `else`, `for` or `while` at the start of the code of a line, up to the round
+  // bracket that opens its condition, if it has one.
+  const STATEMENT_HEAD = /^\s*(?:else\s+)?(?:if|for|while)\s*\(|^\s*else\b/;
+
+  // A name in code that nothing calls and that is not a property, as `timeRatio` is in `[timeRatio]`.
+  const UNCALLED_NAME = /(?<![\w$.])[\w$]+(?![\w$])(?!\s*\()/g;
+
+  // Code that is a name alone, in round brackets or not, or the name bound with `bind`, as `(timeRatio)`
+  // and `timeRatio.bind(null, check)` are, with a semicolon after it or not. The group holds the name.
+  const NAME_ALONE = /^\s*(?:\(\s*)*(\w+)\s*(?:\)\s*)*(?:\.\s*bind\s*\([^]*\)\s*)?(?:;\s*)?$/;
 
   // A string, template literal, regular expression or line comment that starts where the search does, whose
-  // text may hold a slash that divides nothing.
+  // text may hold a slash that divides nothing. A backslash in a template literal may come before a line
+  // break, as one that carries the template on to the next line does.
   const LITERAL =
-    /'(?:\\.|[^\\'\n])*'|"(?:\\.|[^\\"\n])*"|`(?:\\.|[^\\`])*`|\/\/.*|\/(?:\\.|\[(?:\\.|[^\\\]\n])*\]|[^\\/[\n])+\/[a-z]*/y;
+    /'(?:\\.|[^\\'\n])*'|"(?:\\.|[^\\"\n])*"|`(?:\\[^]|[^\\`])*`|\/\/.*|\/(?:\\.|\[(?:\\.|[^\\\]\n])*\]|[^\\/[\n])+\/[a-z]*/y;
 
   // Returns the code of `text`, with a space in place of each character of each string, template literal,
   // regular expression and comment other than a line break, so that each line of the code is the line of
@@ -3443,13 +3456,22 @@ describe('this test file', () => {
     let code = '';
     // The last character of the code so far that is not a space, which is all that a slash needs.
     let last = '';
-    // The place of the last `*/` in the text. A `/*` starts a block comment, which runs to the first `*/`
-    // after it, only when one lies ahead, so the text after the last is not searched once for each `/*`.
+    // The place of the last `*/` in the text, and of the last backtick that an even number of backslashes
+    // comes before, if any, as the backtick that ends a template literal is. A `/*` starts a block comment,
+    // which runs to the first `*/` after it, only when one lies ahead, and a backtick starts a template
+    // literal only when such a backtick lies ahead, so the text after the last is not searched once for each.
     const lastEnd = text.lastIndexOf('*/');
+    let lastTick = -1;
+    for (const { 0: tick, index } of text.matchAll(/(?<!\\)(?:\\\\)*`/g)) lastTick = index + tick.length - 1;
     for (let at = 0; at < text.length; ) {
       const comment = text.startsWith('/*', at) && at + 2 <= lastEnd;
+      const unended = text[at] === '`' && at >= lastTick;
       LITERAL.lastIndex = at;
-      const [literal] = comment ? [text.slice(at, text.indexOf('*/', at + 2) + 2)] : (LITERAL.exec(text) ?? []);
+      const [literal] = comment
+        ? [text.slice(at, text.indexOf('*/', at + 2) + 2)]
+        : unended
+          ? []
+          : (LITERAL.exec(text) ?? []);
       if (literal === undefined || (/^\/[^/*]/.test(literal) && /[\w$)\]]/.test(last))) {
         code += text[at];
         if (/\S/.test(text[at])) last = text[at];
@@ -3472,11 +3494,14 @@ describe('this test file', () => {
 
   // Returns each comparison with `<`, `<=`, `>` or `>=` in `code`, the code of the lines of a file, with
   // the index of the line that it starts on and its two sides. An argument runs from a bracket, a comma or
-  // a semicolon to the next one outside the brackets in it, over as many lines as it takes, or to a closing
-  // curly bracket that ends a line, as one that closes a block does, and it compares with the first sign
-  // outside those brackets. An argument is read when it is the first argument of `assert` or `assert.ok`,
-  // when it starts a line and a comma ends it, or when it lies in an argument that is read. Its comparison
-  // is returned unless an argument read that it lies in compares too, as a side of that comparison holds it.
+  // a semicolon to the next one outside the brackets in it, over as many lines as it takes, to a closing
+  // curly bracket that ends a line, as one that closes a block does, or to a line break between a name, a
+  // number or a closing bracket and a name or a number, as one that ends a statement with no semicolon
+  // does. It compares with the first sign outside those brackets. An argument is read when it is the first
+  // argument of a call whose last name is `assert`, `ok`, `equal` or `strictEqual`, as `assert.ok` and
+  // `t.assert` are, when it starts a line and a comma ends it, or when it lies in an argument that is read.
+  // Its comparison is returned unless an argument read that it lies in compares too, as a side of that
+  // comparison holds it.
   function comparisons(code) {
     const all = [];
     // Each frame is a bracket open where the search is, or the code outside every bracket, with the
@@ -3496,8 +3521,8 @@ describe('this test file', () => {
     enter(undefined, false);
     let line = 0;
     let previous;
-    // The last four tokens other than line breaks, so that a bracket after `assert` or `assert.ok` is known.
-    const recent = [undefined, undefined, undefined, undefined];
+    // The last token other than a line break, so that a bracket after `assert` or `ok` is known.
+    let last;
     for (const { 0: token, index } of code.matchAll(TOKEN)) {
       const frame = frames.at(-1);
       if (token === '\n') {
@@ -3509,14 +3534,16 @@ describe('this test file', () => {
         previous = token;
         continue;
       }
+      if (previous === '\n' && /^[\w$]/.test(token) && /^[\w$)\]]/.test(last)) {
+        finish(frame, index, '\n');
+        begin(frame);
+      }
       const argument = frame.argument;
       if (argument.start === undefined) {
         Object.assign(argument, { start: index, line, startsLine: previous === undefined || previous === '\n' });
       }
       if (token === '(' || token === '[' || token === '{') {
-        const [d, c, b, a] = recent;
-        const isAssert = (a === 'assert' && b !== '.') || (a === 'ok' && b === '.' && c === 'assert' && d !== '.');
-        enter(argument, token === '(' && isAssert);
+        enter(argument, token === '(' && /^(?:assert|ok|equal|strictEqual)$/.test(last));
       } else if (token === ')' || token === ']' || token === '}') {
         if (frames.length > 1) {
           finish(frame, index, token);
@@ -3529,8 +3556,7 @@ describe('this test file', () => {
         Object.assign(argument, { sign: index, signEnd: index + token.length });
       }
       previous = token;
-      recent.push(token);
-      recent.shift();
+      last = token;
     }
     for (const frame of frames) finish(frame, code.length, undefined);
     // Each argument comes after the one that it lies in, so that one is known to be read before it.
@@ -3619,44 +3645,192 @@ describe('this test file', () => {
     });
   }
 
-  // Returns why `value`, the code that a line sets `name` to or compares with a bound, is read as a time
-  // ratio, or undefined when it is not. A value is read as one when it calls timeRatio or a name in
-  // `calls` that a line gives it, when it divides by a value that is not a number, whatever the name, or
-  // when its name is `ratio`, whatever sets it: this file divides nothing else that way. It is read as one
-  // too when it takes a time ratio, a name `ratio` or a name in `names`, other than as the parameter of an
-  // arrow function in it, so that a time ratio divided by a number is still read as one.
-  function timeRatioReason(name, value, names, calls) {
+  // Returns what `value`, the code that a line sets a name to or compares with a bound, is read as: why it
+  // is read as a time ratio whatever its name, as a value that calls timeRatio or a name in `calls` that a
+  // line gives it is, and one that divides by a value that is not a number, as this file divides nothing
+  // else that way; or else the time ratio that it takes, a name `ratio` or a name in `names`, other than as
+  // the parameter of an arrow function in it or a name in `parameters`, if any.
+  function readValue(value, names, calls, parameters) {
     const call = value.match(/\b\w+(?=\s*\()/g)?.find((word) => calls.has(word));
-    if (call === 'timeRatio') return 'a value that calls timeRatio is read as a time ratio';
-    if (call !== undefined) return `a value that calls ${call}, a name given to timeRatio, is read as a time ratio`;
-    if (DIVIDES_BY_VALUE.test(value)) return 'any division by a value is read as a time ratio';
+    if (call === 'timeRatio') return { always: 'a value that calls timeRatio is read as a time ratio' };
+    if (call !== undefined) {
+      return { always: `a value that calls ${call}, a name given to timeRatio, is read as a time ratio` };
+    }
+    if (DIVIDES_BY_VALUE.test(value)) return { always: 'any division by a value is read as a time ratio' };
+    const taken = (word) => (word === 'ratio' || names.has(word)) && !(parameters?.get(word) > 0);
+    return { taken: takenNames(value).find(taken) };
+  }
+
+  // Returns why `name`, set to or compared as the values that readValue reads as `reads`, is read as a time
+  // ratio, or undefined when it is not. It is read as one when a value is read as one whatever its name,
+  // when the name is `ratio`, whatever sets it, or when a value takes a time ratio, so that a time ratio
+  // divided by a number is still read as one.
+  function timeRatioReason(name, reads) {
+    const always = reads.find((read) => read.always !== undefined)?.always;
+    if (always !== undefined) return always;
     if (name === 'ratio') return 'a value named ratio is read as a time ratio';
-    const taken = takenNames(value).find((word) => word === 'ratio' || names.has(word));
+    const taken = reads.find((read) => read.taken !== undefined)?.taken;
     return taken === undefined ? undefined : `a value that takes ${taken}, a time ratio, is read as a time ratio`;
+  }
+
+  // Returns the index of the bracket in `code` that closes the one at `at`, or -1 when none does.
+  function closingBracket(code, at) {
+    let depth = 0;
+    for (let index = at; index < code.length; index += 1) {
+      if ('([{'.includes(code[index])) depth += 1;
+      else if (')]}'.includes(code[index])) depth -= 1;
+      if (depth === 0) return index;
+    }
+    return -1;
+  }
+
+  // Returns what `line`, the code of a line, sets: the name, or the array or object of names that a
+  // destructuring set sets, the sign of a compound assignment and the code after `=` on the line; or
+  // undefined when it sets nothing. The head of an `if`, `else`, `for` or `while` before a set is left out,
+  // and `++` or `--` sets its name to the name and 1 with the sign between them.
+  function setOf(line) {
+    const head = STATEMENT_HEAD.exec(line)?.[0];
+    const start = head === undefined ? 0 : head.endsWith('(') ? closingBracket(line, head.length - 1) + 1 : head.length;
+    const code = line.slice(start);
+    const named = SETS_NAME.exec(code);
+    if (named !== null) return { target: named[1], sign: named[2], rest: named[3] };
+    const step = STEPS_NAME.exec(code);
+    if (step !== null) return { target: step[2] ?? step[3], sign: step[1] ?? step[4], rest: ' 1' };
+    const opens = DESTRUCTURES.exec(code)?.[0].length;
+    const closes = opens === undefined ? -1 : closingBracket(code, opens);
+    const rest = closes === -1 ? null : /^\s*=(?![=>])(.*)$/.exec(code.slice(closes + 1));
+    return rest === null ? undefined : { target: code.slice(opens, closes + 1), sign: undefined, rest: rest[1] };
+  }
+
+  // Returns each name that `target`, the array or object of names that a destructuring set sets, sets, with
+  // the code of its default value, which follows `=` after it, when it has one. A key, which a colon
+  // follows, is not a name that the set sets, and neither is a name in a default value.
+  function patternNames(target) {
+    const found = [];
+    let depth = 0;
+    // The name last read, until the token after it shows whether it is a key, and the default value read,
+    // with the name that it is for, where it starts and the depth of the brackets that it lies in.
+    let name;
+    let fallback;
+    for (const { 0: token, index } of target.matchAll(/[\w$]+|[,:=()[\]{}]/g)) {
+      if (token === ',' || /^[)\]}]$/.test(token)) {
+        if (fallback?.depth === depth) {
+          found.push({ name: fallback.name, fallback: target.slice(fallback.start, index) });
+          fallback = undefined;
+        }
+        if (name !== undefined) found.push({ name });
+        name = undefined;
+      }
+      if (/^[([{]$/.test(token)) depth += 1;
+      else if (/^[)\]}]$/.test(token)) depth -= 1;
+      else if (fallback !== undefined || token === ',') continue;
+      else if (token === '=') [fallback, name] = [{ name, start: index + 1, depth }, undefined];
+      else name = /^[A-Za-z_$]/.test(token) ? token : undefined;
+    }
+    return found;
+  }
+
+  // Returns, for each line of `codes`, the code of the lines of a file, the parameters of each function
+  // whose body is a block that the line opens, as `(ratio) => {` and `function scale(ratio) {` do, and the
+  // parameters of each whose block it closes. The lines of the block after the line that opens it take
+  // them as the function sets them, and not as time ratios that a line before the function sets.
+  function blockParameters(codes) {
+    const opens = codes.map(() => []);
+    const closes = codes.map(() => []);
+    // Each token read, the index in it of the opening bracket of each closing bracket read, and each
+    // bracket open, with its index and the parameters of the function whose body it is, if any.
+    const tokens = [];
+    const opening = [];
+    const brackets = [];
+    let line = 0;
+    for (const [token] of codes.join('\n').matchAll(/[\w$]+|=>|[()[\]{}\n]/g)) {
+      if (token === '\n') {
+        line += 1;
+        continue;
+      }
+      const last = tokens.length - 1;
+      if (/^[([{]$/.test(token)) {
+        let list = [];
+        const before = opening[last];
+        if (token === '{' && tokens[last] === '=>') {
+          const first = tokens[last - 1] === ')' ? opening[last - 1] : last - 1;
+          list = first === undefined ? [] : tokens.slice(first, last);
+        } else if (
+          token === '{' &&
+          before !== undefined &&
+          [tokens[before - 1], tokens[before - 2]].includes('function')
+        ) {
+          list = tokens.slice(before, last);
+        }
+        const parameters = list.filter((word) => /^[A-Za-z_$]/.test(word));
+        opens[line].push(...parameters);
+        brackets.push({ index: tokens.length, parameters });
+      } else if (/^[)\]}]$/.test(token) && brackets.length > 0) {
+        const { index, parameters } = brackets.pop();
+        opening[tokens.length] = index;
+        closes[line].push(...parameters);
+      }
+      tokens.push(token);
+    }
+    return { opens, closes };
   }
 
   // Returns the index of each line in `codes`, the code of the lines of a file, that sets a name to a time
   // ratio, with the name, what the line sets it to and why that is read as a time ratio, and timeRatio
-  // with each name that a line gives it, as `const measure = timeRatio;` does. A destructuring set sets
-  // each of its names to what it sets, and a compound assignment sets its name to the name and what it
-  // sets with the sign between them. The time ratios that a value can take, and the names of timeRatio
-  // that it can call, are those that the lines before it set.
+  // with each name that a line gives it, as `const measure = timeRatio;` or `const [measure] = [timeRatio];`
+  // does. What a line sets runs on to the end of its statement. A destructuring set sets each of its names
+  // to its default value, if any, and what it sets, and a compound assignment sets its name to the name and
+  // what it sets with the sign between them. The time ratios that a value can take, and the names of
+  // timeRatio that it can call, are those that the lines before it set, other than the parameters of each
+  // function whose block the line lies in.
   function timeRatioLines(codes) {
     const ratios = [];
     const names = new Set();
     const calls = new Set(['timeRatio']);
-    // The index of the first line from each line on whose code ends with a semicolon, or -1 when none does.
+    const sets = codes.map(setOf);
+    // The index of the last line of the statement that each line starts or continues: the first line from
+    // it on whose code ends with a semicolon, or the last before the next line that is not blank when that
+    // line sets a name, or starts with a name or a number after a line that ends with one or with a closing
+    // bracket, as a statement with no semicolon before it does. A statement that nothing ends runs on to
+    // the last line.
     const ends = [];
-    for (let at = codes.length - 1; at >= 0; at -= 1) ends[at] = /;\s*$/.test(codes[at]) ? at : (ends[at + 1] ?? -1);
-    codes.forEach((code, index) => {
-      const [, target, sign, rest] = SETS_NAME.exec(code) ?? [];
-      if (target === undefined) return;
+    let next;
+    for (let at = codes.length - 1; at >= 0; at -= 1) {
+      const ended =
+        /;\s*$/.test(codes[at]) ||
+        sets[next] !== undefined ||
+        (/[\w$)\]}]\s*$/.test(codes[at]) && /^\s*[\w$]/.test(codes[next] ?? ''));
+      ends[at] = ended ? at : (ends[at + 1] ?? at);
+      if (/\S/.test(codes[at])) next = at;
+    }
+    const { opens, closes } = blockParameters(codes);
+    // How many functions whose block the line read lies in have each name as a parameter.
+    const parameters = new Map();
+    const count = (list, by) => list.forEach((name) => parameters.set(name, (parameters.get(name) ?? 0) + by));
+    codes.forEach((_, index) => {
+      if (index > 0) {
+        count(opens[index - 1], 1);
+        count(closes[index - 1], -1);
+      }
+      if (sets[index] === undefined) return;
+      const { target, sign, rest } = sets[index];
       const joined = [rest, ...codes.slice(index + 1, ends[index] + 1)].join('\n');
       const value = sign === undefined ? joined : `${target} ${sign} ${joined}`;
       const destructures = /^[[{]/.test(target);
-      if (!destructures && sign === undefined && calls.has(/^\s*(\w+)\s*(?:;\s*)?$/.exec(value)?.[1])) calls.add(target);
-      const found = (destructures ? (target.match(PATTERN_NAME) ?? []) : [target])
-        .map((name) => ({ index, name, value, reason: timeRatioReason(name, value, names, calls) }))
+      // A destructuring set gives its names timeRatio when what it sets is an array or object that holds
+      // timeRatio or a name given to it with no call after it, and any other set when what it sets is
+      // timeRatio or such a name, in round brackets or not, or such a name bound with `bind`.
+      const gives = destructures
+        ? /^\s*[[{]/.test(value) && [...value.matchAll(UNCALLED_NAME)].some(([word]) => calls.has(word))
+        : calls.has(NAME_ALONE.exec(value)?.[1]);
+      const targets = destructures ? patternNames(target) : [{ name: target }];
+      if (gives) for (const { name } of targets) calls.add(name);
+      const read = readValue(value, names, calls, parameters);
+      const found = targets
+        .map(({ name, fallback }) => {
+          const reads = fallback === undefined ? [read] : [readValue(fallback, names, calls, parameters), read];
+          return { index, name, value, reason: timeRatioReason(name, reads) };
+        })
         .filter(({ reason }) => reason !== undefined);
       ratios.push(...found);
       for (const set of found) names.add(set.name);
@@ -3691,7 +3865,7 @@ describe('this test file', () => {
       comparedOn.get(compared.index).push(compared);
     }
     const reasonAt = (value) =>
-      (lastSets.get(value) ?? firstSets.get(value))?.reason ?? timeRatioReason(value, value, names, calls);
+      (lastSets.get(value) ?? firstSets.get(value))?.reason ?? timeRatioReason(value, [readValue(value, names, calls)]);
     let passed = 0;
     return lines.flatMap((_, index) => {
       for (; passed < ratios.length && ratios[passed].index < index; passed += 1) {
@@ -4097,9 +4271,185 @@ describe('this test file', () => {
     ]);
   });
 
-  test('reads a block comment up to the first `*/` after its `/*`, and a `/*` that none follows as code', () => {
+  test('reads a block comment up to the first `*/` after its `/*`, an empty one too, and a `/*` that none follows as code', () => {
     assert.equal(codeOf('a /* b */ c /* d'), 'a         c /* d');
     assert.equal(codeOf('/*/ a */ b'), '         b');
+    // The last block comment of a text, empty, is not read as a regular expression with the letters after it.
+    assert.equal(codeOf('a /**/x'), 'a     x');
+  });
+
+  test('reads a template literal up to a backtick that an even number of backslashes comes before, over a line break', () => {
+    assert.equal(codeOf('`a \\\\` b'), '       b');
+    assert.equal(codeOf('`a \\\nb` x'), '    \n   x');
+    // A backtick that one backslash comes before ends no template literal, so the one before it is code.
+    assert.equal(codeOf('a ` b \\` c'), 'a ` b \\` c');
+  });
+
+  test('reads a comparison in the first argument of a call whose last name is assert, ok, equal or strictEqual', () => {
+    const lines = [
+      '    const ratio = timeRatio(check, 32_000);',
+      "    assert.equal(ratio < 6, true, 'x');",
+      '    assert.strictEqual(ratio < LINEAR_TIME_RATIO * 100, true);',
+      "    ok(ratio < 6, 'x');",
+      "    t.assert.ok(ratio < 6, 'x');",
+      "    harness.assert(ratio < 6, 'x');",
+      // An argument of another call, or another argument, is read only when it starts a line and a comma
+      // ends it.
+      "    check(ratio < 6, 'x');",
+      "    assert.okay(ratio < 6, 'x');",
+      '    assert.equal(true, ratio < 6);',
+    ];
+    const calls = 'a value that calls timeRatio is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 2 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 3 compares a time ratio with LINEAR_TIME_RATIO * 100, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 4 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 5 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 6 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+    ]);
+  });
+
+  test('reports the first time ratio that a line sets, and each comparison that starts on a line', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const [ratio, other] = [factor, factor];',
+      "    assert.ok(factor < 6, 'x'); assert.ok(factor < 8, 'x');",
+    ];
+    const calls = 'a value that calls timeRatio is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      'line 2 sets a time ratio that is not a call of timeRatio; a value named ratio is read as a time ratio',
+      `line 3 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 3 compares a time ratio with 8, not LINEAR_TIME_RATIO; ${calls}`,
+    ]);
+  });
+
+  test('reads a shift as no comparison, and a side split over lines with a space for its line break', () => {
+    const lines = [
+      '    const ratio = timeRatio(check, 32_000);',
+      "    assert.ok(ratio << 2, 'x');",
+      "    assert.ok(ratio >>> 1, 'x');",
+      "    assert.ok(ratio >> 1, 'x');",
+      '    assert.ok(ratio < LINEAR_TIME_RATIO *',
+      "      2, 'x');",
+    ];
+    assert.deepEqual(ownTimeRatios(lines), [
+      'line 5 compares a time ratio with LINEAR_TIME_RATIO * 2, not LINEAR_TIME_RATIO; a value that calls timeRatio is read as a time ratio',
+    ]);
+  });
+
+  test('reads a set by var, ++ or --, after the head of an if, else, for or while, or by destructuring with a default or in brackets', () => {
+    const lines = [
+      '    const { ratio = timeRatio(check, 32_000) / 4 } = {};',
+      '    const [ratio = timeRatio(check, 32_000) / 4] = [];',
+      '    ({ ratio } = { ratio: timeRatio(check, 32_000) / 4 });',
+      '    var ratio = timeRatio(check, 32_000) / 4;',
+      '    let ratio = timeRatio(check, 32_000);',
+      '    ratio--;',
+      '    ++ratio;',
+      '    if (ratio > 1) ratio = ratio / 4;',
+      '    else ratio = ratio * 4;',
+      '    while (ratio > 1) ratio -= 1;',
+      '    for (const size of sizes) ratio = size;',
+      // A name in a default value is not a name that the set sets.
+      '    const [size = pick(other, ratio)] = [];',
+      "    assert.ok(ratio < LINEAR_TIME_RATIO, 'x');",
+    ];
+    const calls = 'a value that calls timeRatio is read as a time ratio';
+    const named = 'a value named ratio is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 1 sets a time ratio that is not a call of timeRatio; ${calls}`,
+      `line 2 sets a time ratio that is not a call of timeRatio; ${calls}`,
+      `line 3 sets a time ratio that is not a call of timeRatio; ${calls}`,
+      `line 4 sets a time ratio that is not a call of timeRatio; ${calls}`,
+      `line 6 sets a time ratio that is not a call of timeRatio; ${named}`,
+      `line 7 sets a time ratio that is not a call of timeRatio; ${named}`,
+      `line 8 sets a time ratio that is not a call of timeRatio; ${named}`,
+      `line 9 sets a time ratio that is not a call of timeRatio; ${named}`,
+      `line 10 sets a time ratio that is not a call of timeRatio; ${named}`,
+      `line 11 sets a time ratio that is not a call of timeRatio; ${named}`,
+      'line 12 sets a time ratio that is not a call of timeRatio; a value that takes ratio, a time ratio, is read as a time ratio',
+    ]);
+  });
+
+  test('follows a name given to timeRatio with no semicolon, in round brackets, by bind or by destructuring', () => {
+    const lines = [
+      '    const measure = timeRatio',
+      '    const first = measure(check, 4) / 4',
+      '    const tr = (timeRatio);',
+      '    const second = tr(check, 32_000) / 4;',
+      '    const bound = timeRatio.bind(null, check);',
+      '    const third = bound(32_000) / 4;',
+      '    const [given] = [timeRatio];',
+      '    const fourth = given(check, 32_000) / 4;',
+      '    const { other } = { other: tr };',
+      '    const fifth = other(check, 32_000) / 4;',
+      // An array, a name that a destructuring set sets from timeRatio itself and a time ratio are not names
+      // given to timeRatio.
+      '    const array = [timeRatio];',
+      '    const sixth = array(check, 32_000);',
+      '    const [called] = timeRatio;',
+      '    const seventh = called(check, 32_000);',
+      '    const [result] = [timeRatio(check, 32_000)];',
+      '    const eighth = result(check, 32_000);',
+    ];
+    const given = (name) => `a value that calls ${name}, a name given to timeRatio, is read as a time ratio`;
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 2 sets a time ratio that is not a call of timeRatio; ${given('measure')}`,
+      `line 4 sets a time ratio that is not a call of timeRatio; ${given('tr')}`,
+      `line 6 sets a time ratio that is not a call of timeRatio; ${given('bound')}`,
+      `line 8 sets a time ratio that is not a call of timeRatio; ${given('given')}`,
+      `line 10 sets a time ratio that is not a call of timeRatio; ${given('other')}`,
+      'line 15 sets a time ratio that is not a call of timeRatio; a value that calls timeRatio is read as a time ratio',
+      'line 16 sets a time ratio that is not a call of timeRatio; a value that takes result, a time ratio, is read as a time ratio',
+    ]);
+  });
+
+  test('reads no parameter of a function whose body is a block as a time ratio that a line of the block takes', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const scale = (ratio) => {',
+      '      const doubled = ratio * 2;',
+      '      return doubled;',
+      '    };',
+      '    const halve = factor => {',
+      '      const half = factor * 2;',
+      '    };',
+      '    function shrink(ratio) {',
+      '      const smaller = ratio - 1;',
+      '    }',
+      '    items.forEach(function (ratio) {',
+      '      const larger = ratio + 1;',
+      '    });',
+      '    if (ratio > 1) {',
+      '      const inside = ratio * 2;',
+      '    }',
+      '    const after = factor * 2;',
+    ];
+    const takes = (name) => `a value that takes ${name}, a time ratio, is read as a time ratio`;
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 16 sets a time ratio that is not a call of timeRatio; ${takes('ratio')}`,
+      `line 18 sets a time ratio that is not a call of timeRatio; ${takes('factor')}`,
+    ]);
+  });
+
+  test('reads a statement with no semicolon as ending before a line that starts another, after any comment line', () => {
+    const lines = [
+      '    const ratio = timeRatio(check, 32_000)',
+      '      ratio < 6,',
+      '    const factor = timeRatio(check, 32_000)',
+      '    // the bound',
+      '      factor < 6,',
+      '    check();',
+      // A statement that nothing ends runs on to the last line.
+      '    const later = fastest(repeats) /',
+      '      fastest(repeats / 4)',
+    ];
+    const calls = 'a value that calls timeRatio is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 2 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 5 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${calls}`,
+      'line 7 sets a time ratio that is not a call of timeRatio; any division by a value is read as a time ratio',
+    ]);
   });
 
   test('reads the code of a long line of divisions in linear time', () => {
@@ -4184,6 +4534,53 @@ describe('this test file', () => {
     };
     const ratio = timeRatio(check, 8_000);
     assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the lines took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('checks many lines, or one long line, with a backtick that a backslash comes before in linear time', () => {
+    // Returns a function that takes the time to check the lines that `make` makes with the given number of
+    // backticks. Searching to the end of the file for the end of a template literal at each backtick, when
+    // no backtick ends one, took time that grew with the square of the number of backticks.
+    const timer = (make) => (count) => {
+      const lines = make(count);
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const makers = [(count) => Array.from({ length: count }, () => 'x \\` y'), (count) => ['x \\` y '.repeat(count)]];
+    for (const make of makers) {
+      const ratio = timeRatio(timer(make), 8_000);
+      assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the backticks took ${ratio.toFixed(2)} times as long`);
+    }
+  });
+
+  test('checks a destructuring set of many names in linear time', () => {
+    // Returns the time taken to check a destructuring set of the given number of names to a sum of as many
+    // values. Reading the value again for each name took time that grew with the square of the number of
+    // names.
+    const check = (count) => {
+      const lines = [`    const [${'a, '.repeat(count)}a] = ${'b + '.repeat(count)}b;`];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const ratio = timeRatio(check, 2_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the names took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('checks many lines that set a name before the first semicolon in linear time', () => {
+    // Returns a function that takes the time to check the given number of copies of `line` and then a line
+    // with a semicolon. Reading each set on to the semicolon took time that grew with the square of the number of
+    // lines, whether a line ends with a name, as one before the start of a statement does, or with a sign.
+    const timer = (line) => (count) => {
+      const lines = [...Array.from({ length: count }, () => line), ';'];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    for (const line of ['a = b', 'a = b +']) {
+      const ratio = timeRatio(timer(line), 2_000);
+      assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the lines took ${ratio.toFixed(2)} times as long`);
+    }
   });
 
   test('every time ratio is set with timeRatio and compared with LINEAR_TIME_RATIO', () => {
