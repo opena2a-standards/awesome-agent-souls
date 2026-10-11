@@ -111,6 +111,6 @@ These architectural hooks enable centralized management without requiring it tod
 
 ## Further Reading
 
-- [Creating Your First Soul](creating-your-first-soul.md) -- start here if your team does not have a soul file yet
-- [Soul Hardening](soul-hardening.md) -- protecting soul files from tampering
-- [Soul vs Skills](soul-vs-skills.md) -- understanding when to use a soul versus a skill
+- [Creating Your First Soul](creating-your-first-soul.md): start here if your team does not have a soul file yet
+- [Soul Hardening](soul-hardening.md): protecting soul files from tampering
+- [Soul vs Skills](soul-vs-skills.md): understanding when to use a soul versus a skill

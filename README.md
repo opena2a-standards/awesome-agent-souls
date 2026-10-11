@@ -2,7 +2,7 @@
 
 [![Status: stable](https://img.shields.io/badge/status-stable-green)](./STATUS.md)
 
-**A curated collection of SOUL.md identity files for AI agents -- organized by role, industry, organization type, use case, and fleet.**
+**A curated collection of SOUL.md identity files for AI agents, organized by role, industry, organization type, use case, and fleet.**
 
 ---
 
@@ -12,7 +12,7 @@ This list is **tool-agnostic** (works with any AI coding assistant that reads ma
 
 Think of it as `.editorconfig` for AI agent behavior: a portable, human-readable file that travels with your project and tells any AI assistant *who it should be* when working in that codebase.
 
-Every soul in this collection includes governance sections covering boundaries, domain knowledge, and **harm avoidance** (Domain 19 of the [Agent Behavioral Governance Specification](https://github.com/opena2a-org/agent-governance-spec), OASB-2) -- guidance for exercising judgment in gray areas where an action is technically permitted but may cause unintended harm.
+Every soul in this collection includes governance sections covering boundaries, domain knowledge, and **harm avoidance** (Domain 19 of the [Agent Behavioral Governance Specification](https://github.com/opena2a-org/agent-governance-spec), OASB-2): guidance for exercising judgment in gray areas where an action is technically permitted but may cause unintended harm.
 
 **100+ souls** across five dimensions: 25 by-role, 10 by-industry, 7 by-org-type, 6 by-use-case, 15 by-fleet, plus 2 starter examples.
 
@@ -20,7 +20,7 @@ Every soul in this collection includes governance sections covering boundaries, 
 
 ## Where SOUL.md Lives
 
-Place `SOUL.md` in your **project root** -- the same directory as `package.json`, `go.mod`, `Cargo.toml`, or whatever marks the top of your repository. This is the same convention used by `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and other AI instruction files.
+Place `SOUL.md` in your **project root**: the same directory as `package.json`, `go.mod`, `Cargo.toml`, or whatever marks the top of your repository. This is the same convention used by `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and other AI instruction files.
 
 ```
 my-project/
@@ -34,7 +34,7 @@ my-project/
 
 ### How AI Tools Discover It
 
-AI coding tools read project-level instruction files from the repository root at the start of each session. The soul file works the same way -- it is loaded into the agent's context before it starts working.
+AI coding tools read project-level instruction files from the repository root at the start of each session. The soul file works the same way: it is loaded into the agent's context before it starts working.
 
 | Tool | Native File | How to Use SOUL.md |
 |------|------------|-------------------|
@@ -42,7 +42,7 @@ AI coding tools read project-level instruction files from the repository root at
 | Cursor | `.cursorrules` | Rename to `.cursorrules`, or reference SOUL.md from `.cursorrules` |
 | Windsurf | `.windsurfrules` | Rename to `.windsurfrules`, or reference SOUL.md |
 | GitHub Copilot | `.github/copilot-instructions.md` | Copy to `.github/copilot-instructions.md` |
-| OpenClaw | `SOUL.md` | Natively reads `SOUL.md` from `~/.openclaw/workspaces/<name>/SOUL.md` -- copy directly |
+| OpenClaw | `SOUL.md` | Natively reads `SOUL.md` from `~/.openclaw/workspaces/<name>/SOUL.md` (copy directly) |
 | Aider | `.aider.conf.yml` | Reference via `read:` directive |
 | Any tool | Varies | Most tools that read markdown from project root will pick up `SOUL.md` directly |
 
@@ -68,7 +68,7 @@ my-project/
     report-agent.md    <-- specialist agent 3
 ```
 
-Each agent in the fleet gets its own soul file. The `FLEET.md` defines how they coordinate -- handoff rules, shared artifacts, escalation paths, and which coordination pattern to use (sequential, parallel, hub-spoke, or mesh).
+Each agent in the fleet gets its own soul file. The `FLEET.md` defines how they coordinate: handoff rules, shared artifacts, escalation paths, and which coordination pattern to use (sequential, parallel, hub-spoke, or mesh).
 
 ### For Monorepos
 
@@ -191,7 +191,7 @@ Agent souls in this collection are organized along five independent dimensions:
 | **By Use Case** | What task do you handle? | 6 | Personal assistant, inbox triage, content creation |
 | **By Fleet** | What team do you need? | 15 | Red Team Ops, Dev Squad, HR Operations |
 
-Each dimension is independent. A soul from one dimension can be combined with souls from any other dimension to create a highly specific agent identity tailored to your exact context. Fleets add a coordination layer -- instead of a single agent, you deploy a team of agents that work together with defined handoff rules and shared governance.
+Each dimension is independent. A soul from one dimension can be combined with souls from any other dimension to create a highly specific agent identity tailored to your exact context. Fleets add a coordination layer: instead of a single agent, you deploy a team of agents that work together with defined handoff rules and shared governance.
 
 ---
 
@@ -255,7 +255,7 @@ After combining, review the merged files to resolve any conflicting instructions
 
 ## By Role (25 souls)
 
-Role-based souls define *what the agent does* -- its technical expertise, communication style, and professional focus. These are the foundation of any agent identity.
+Role-based souls define *what the agent does*: its technical expertise, communication style, and professional focus. These are the foundation of any agent identity.
 
 ### Security
 
@@ -328,7 +328,7 @@ Souls for technical communication and design work: documentation, advocacy, and 
 
 ## By Industry (10 souls)
 
-Industry souls define *where the agent works* -- the regulatory environment, domain-specific standards, data sensitivity requirements, and industry terminology it must understand. These souls do not replace a role; they augment one.
+Industry souls define *where the agent works*: the regulatory environment, domain-specific standards, data sensitivity requirements, and industry terminology it must understand. These souls do not replace a role; they augment one.
 
 | Soul | Focus | Key Standards and Regulations |
 |------|-------|-------------------------------|
@@ -347,7 +347,7 @@ Industry souls define *where the agent works* -- the regulatory environment, dom
 
 ## By Organization Type (7 souls)
 
-Organization-type souls define *how the organization operates* -- its decision-making velocity, compliance posture, budget constraints, and cultural norms. These constrain how role and industry souls are applied in practice.
+Organization-type souls define *how the organization operates*: its decision-making velocity, compliance posture, budget constraints, and cultural norms. These constrain how role and industry souls are applied in practice.
 
 | Soul | Focus | Key Constraints |
 |------|-------|-----------------|
@@ -363,7 +363,7 @@ Organization-type souls define *how the organization operates* -- its decision-m
 
 ## By Use Case (6 souls)
 
-Use-case souls define *what task the agent handles* -- common workflows that span across roles and industries. These are designed for any autonomous agent runtime that uses SOUL.md for identity -- including [OpenClaw](https://github.com/openclaw/openclaw), custom agent frameworks, messaging-platform bots, and scheduled automation agents.
+Use-case souls define *what task the agent handles*: common workflows that span across roles and industries. These are designed for any autonomous agent runtime that uses SOUL.md for identity, including [OpenClaw](https://github.com/openclaw/openclaw), custom agent frameworks, messaging-platform bots, and scheduled automation agents.
 
 | Soul | Focus | Popular Platforms |
 |------|-------|-------------------|
@@ -386,7 +386,7 @@ cat souls/by-industry/fintech/fintech-agent.md >> ./SOUL.md
 
 ## By Fleet (15 teams)
 
-Fleet souls define *coordinated teams* of AI agents that work together. Each fleet contains individual agent soul files plus a shared `FLEET.md` that defines the coordination protocol, handoff rules, and shared governance. Unlike individual souls, fleets model how agents collaborate -- who hands off to whom, what artifacts are shared, and how decisions are escalated.
+Fleet souls define *coordinated teams* of AI agents that work together. Each fleet contains individual agent soul files plus a shared `FLEET.md` that defines the coordination protocol, handoff rules, and shared governance. Unlike individual souls, fleets model how agents collaborate: who hands off to whom, what artifacts are shared, and how decisions are escalated.
 
 | Fleet | Team Size | Coordination | Focus |
 |-------|-----------|-------------|-------|
@@ -410,10 +410,10 @@ Fleet souls define *coordinated teams* of AI agents that work together. Each fle
 
 Fleets use one of four coordination patterns defined in their `FLEET.md`:
 
-- **Sequential** -- Agents work in a pipeline. The output of one agent feeds directly into the next. Used when work has a natural linear progression (e.g., recon before exploit before report).
-- **Parallel** -- Agents work independently on different aspects of the same problem. Results are synthesized at the end. Used when tasks are independent and speed matters.
-- **Hub-spoke** -- One coordinating agent routes work to specialists and aggregates results. Used when a central decision-maker needs to triage and delegate.
-- **Mesh** -- All agents communicate directly with each other, typically through shared artifacts like pull requests or documents. Used when collaboration is fluid and any agent may need input from any other.
+- **Sequential**: Agents work in a pipeline. The output of one agent feeds directly into the next. Used when work has a natural linear progression (e.g., recon before exploit before report).
+- **Parallel**: Agents work independently on different aspects of the same problem. Results are synthesized at the end. Used when tasks are independent and speed matters.
+- **Hub-spoke**: One coordinating agent routes work to specialists and aggregates results. Used when a central decision-maker needs to triage and delegate.
+- **Mesh**: All agents communicate directly with each other, typically through shared artifacts like pull requests or documents. Used when collaboration is fluid and any agent may need input from any other.
 
 ---
 
@@ -531,9 +531,9 @@ For a comprehensive treatment, see the [Soul Hardening guide](guides/soul-harden
 
 ## Soul vs Skills
 
-A **soul** defines *who the agent is* -- identity, personality, values, communication style, and operational boundaries. It is persistent across all tasks.
+A **soul** defines *who the agent is*: identity, personality, values, communication style, and operational boundaries. It is persistent across all tasks.
 
-A **skill** defines *what the agent can do* -- a specific capability, workflow, or procedure that the agent executes on demand. Skills are task-specific and invoked as needed.
+A **skill** defines *what the agent can do*: a specific capability, workflow, or procedure that the agent executes on demand. Skills are task-specific and invoked as needed.
 
 | Aspect | Soul | Skill |
 |--------|------|-------|

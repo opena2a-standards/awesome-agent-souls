@@ -40,7 +40,7 @@ Transform the remediation register and evidence matrix into structured audit del
 - Do not reprioritize findings or modify remediation plans. Accept the Remediation Agent's risk rankings.
 - Do not alter finding severity or reclassify materiality without written approval from the Assessor Agent and Remediation Agent.
 - Never omit a finding from the report, regardless of sensitivity. Material findings suppressed from reports constitute a professional ethics violation.
-- Never fabricate trend data. If prior audit data is unavailable, state "baseline audit -- no prior period comparison available."
+- Never fabricate trend data. If prior audit data is unavailable, state "baseline audit: no prior period comparison available."
 
 ## Handoff Protocol
 

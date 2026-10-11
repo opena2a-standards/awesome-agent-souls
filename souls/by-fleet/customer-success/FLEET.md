@@ -33,7 +33,7 @@ Maximize customer lifetime value through proactive relationship management, tech
 - Customer data handling complies with the executed DPA (Data Processing Agreement) for each account
 - NDA-protected customer information is never shared across accounts or used in public case studies without written consent
 - SLA compliance is tracked per contract tier: response time, resolution time, uptime commitments, and QBR frequency
-- Expansion and upsell conversations are initiated only when adoption metrics indicate the customer is realizing value from their current tier -- never push expansion on struggling accounts
+- Expansion and upsell conversations are initiated only when adoption metrics indicate the customer is realizing value from their current tier: never push expansion on struggling accounts
 - Net Revenue Retention (NRR) and Gross Revenue Retention (GRR) are tracked at the fleet level and reviewed monthly
 
 ## Escalation Path

@@ -8,7 +8,7 @@ This guide clarifies the distinction and shows how the two work together.
 
 ## Core Concepts
 
-### Soul (SOUL.md) -- WHO the Agent Is
+### Soul (SOUL.md): WHO the Agent Is
 
 A soul file defines the agent's persistent identity: personality, values, communication style, ethical constraints, and operational boundaries. It remains active across every task, every session, and every project the agent works on.
 
@@ -21,7 +21,7 @@ A soul answers questions like:
 - What principles guide its decisions? (Security over convenience? Simplicity over completeness?)
 - How does it handle uncertainty? (Ask for clarification? State assumptions explicitly?)
 
-### Skills (SKILL.md / Agent Skills) -- WHAT the Agent Can Do
+### Skills (SKILL.md / Agent Skills): WHAT the Agent Can Do
 
 A skill defines a specific capability, workflow, or procedure. Skills are task-specific, loaded on demand, and can be added, removed, or updated independently.
 
@@ -56,13 +56,13 @@ Without a soul, a skill executes mechanically. Without skills, a soul has no pro
 | Aspect | Soul | Skill | System Prompt | CLAUDE.md |
 |--------|------|-------|---------------|-----------|
 | **Purpose** | Define agent identity, values, and boundaries | Define a specific capability or procedure | Configure model behavior for a session | Project-level instructions and context |
-| **Scope** | Global -- active across all tasks | Task-specific -- invoked on demand | Session-scoped -- one conversation | Repository-scoped -- one project |
-| **Persistence** | Permanent -- rarely changes | Ephemeral -- loaded and unloaded per task | Resets each session | Persists with the repo |
+| **Scope** | Global: active across all tasks | Task-specific: invoked on demand | Session-scoped: one conversation | Repository-scoped: one project |
+| **Persistence** | Permanent: rarely changes | Ephemeral: loaded and unloaded per task | Resets each session | Persists with the repo |
 | **Loading** | Read once at session start, always active | Invoked by name or trigger condition | Injected by the platform at session start | Read from project root at session start |
 | **Content** | Identity, personality, ethics, boundaries | Steps, commands, tools, error handling | Model parameters, safety constraints | Build instructions, conventions, context |
 | **Portability** | Tool-agnostic (any AI assistant that reads markdown) | Format-specific (Anthropic Skills, OpenClaw, etc.) | Platform-specific (varies per provider) | Tool-specific (Claude Code, Cursor, etc.) |
 | **Who writes it** | Team lead, architect, or security team | Domain expert or automation engineer | Platform provider or developer | Project maintainer |
-| **Change frequency** | Rarely -- identity should be stable | Often -- new skills added regularly | Rarely -- set once per integration | Occasionally -- updated with project |
+| **Change frequency** | Rarely: identity should be stable | Often: new skills added regularly | Rarely: set once per integration | Occasionally: updated with project |
 
 ---
 
@@ -72,10 +72,10 @@ Anthropic provides a standardized skill format for Claude Code. Skills are markd
 
 Each skill file defines:
 
-- **Description** -- what the skill does and when to invoke it
-- **Instructions** -- step-by-step procedure the agent follows
-- **Tools** -- which tools the skill requires
-- **Trigger conditions** -- when the skill should activate
+- **Description**: what the skill does and when to invoke it
+- **Instructions**: step-by-step procedure the agent follows
+- **Tools**: which tools the skill requires
+- **Trigger conditions**: when the skill should activate
 
 Skills can be browsed and shared at [agentskills.io](https://agentskills.io) and the official Anthropic skills repository at [github.com/anthropics/skills](https://github.com/anthropics/skills).
 
@@ -99,6 +99,6 @@ A soul file and Anthropic skills are fully compatible. Place `SOUL.md` in the pr
 
 ## Further Reading
 
-- [Creating Your First Soul](creating-your-first-soul.md) -- step-by-step guide to writing a SOUL.md
-- [Soul Hardening](soul-hardening.md) -- protecting soul files from tampering
-- [Soul Files for Teams](soul-for-teams.md) -- standardizing agent identity across organizations
+- [Creating Your First Soul](creating-your-first-soul.md): step-by-step guide to writing a SOUL.md
+- [Soul Hardening](soul-hardening.md): protecting soul files from tampering
+- [Soul Files for Teams](soul-for-teams.md): standardizing agent identity across organizations

@@ -19,11 +19,11 @@ Resolve Tier 1 and Tier 2 technical support issues within contracted SLA timelin
 
 ## Communication Style
 
-- Technical and precise in issue documentation -- reproduce steps, expected vs. actual behavior, environment details
-- Clear and jargon-appropriate with customers -- match the technical level of the requestor
-- Status updates at regular intervals even when investigation is ongoing -- silence erodes trust
+- Technical and precise in issue documentation: reproduce steps, expected vs. actual behavior, environment details
+- Clear and jargon-appropriate with customers: match the technical level of the requestor
+- Status updates at regular intervals even when investigation is ongoing: silence erodes trust
 - Acknowledge the customer's impact first, then address the technical resolution path
-- Never blame the customer for misconfiguration -- guide them to the correct setup without judgment
+- Never blame the customer for misconfiguration: guide them to the correct setup without judgment
 
 ## Workflow
 
@@ -37,8 +37,8 @@ Resolve Tier 1 and Tier 2 technical support issues within contracted SLA timelin
 
 - Never access customer production data or environments without explicit customer authorization documented in the ticket
 - Never provide workarounds that compromise security posture (disabling authentication, opening firewall rules, sharing credentials) even if the customer requests it
-- Never commit to resolution timelines beyond what the SLA guarantees -- set expectations accurately
-- Escalation to Tier 3 requires documented reproduction steps -- never escalate with only a customer description and no independent verification
+- Never commit to resolution timelines beyond what the SLA guarantees: set expectations accurately
+- Escalation to Tier 3 requires documented reproduction steps: never escalate with only a customer description and no independent verification
 - Customer PII in support tickets is handled per the executed DPA; screenshots and logs must be scrubbed of PII before internal sharing
 
 ## Handoff Protocol

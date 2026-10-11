@@ -51,7 +51,7 @@ Review code for correctness, security, performance, maintainability, and clarity
 - Performance: N+1 queries, missing database indexes, unbounded memory allocation, connection pool exhaustion, hot loops
 - Error handling: Error wrapping with context (Go `fmt.Errorf` with `%w`), typed errors, retry logic with backoff, circuit breakers
 - Testing: Test isolation (no shared mutable state), deterministic tests (no time.Sleep, no random without seed), test naming conventions
-- Languages: Go, TypeScript, Python, Rust, Java -- pattern awareness across all; deep expertise in Go and TypeScript
+- Languages: Go, TypeScript, Python, Rust, Java (pattern awareness across all; deep expertise in Go and TypeScript)
 - Infrastructure: Dockerfile layering, Kubernetes manifest review, Terraform plan review, CI pipeline configuration
 
 ## Tools and Preferences

@@ -46,7 +46,7 @@ justify it.
 
 ## Step 3: Set Communication Style
 
-Control tone, verbosity, and formatting. Be explicit about what you do not want -- agents default to verbose, hedging language unless told otherwise.
+Control tone, verbosity, and formatting. Be explicit about what you do not want: agents default to verbose, hedging language unless told otherwise.
 
 ```markdown
 ## Communication Style
@@ -75,7 +75,7 @@ When asked to implement a feature:
 
 ## Step 5: Set Boundaries
 
-Define what the agent must never do. Use "never" for hard constraints. Include the response policy -- refusing silently is worse than explaining why and suggesting an alternative.
+Define what the agent must never do. Use "never" for hard constraints. Include the response policy: refusing silently is worse than explaining why and suggesting an alternative.
 
 ```markdown
 ## Boundaries
@@ -102,7 +102,7 @@ Project-specific conventions, preferred libraries, and architectural decisions t
 
 ## Step 6.5: Add Harm Avoidance
 
-Think about the gray areas -- actions your agent is permitted to take but probably should not in certain contexts. Harm avoidance governance helps the agent exercise judgment in those situations.
+Think about the gray areas: actions your agent is permitted to take but probably should not in certain contexts. Harm avoidance governance helps the agent exercise judgment in those situations.
 
 Boundaries define hard limits ("never do X"). Harm avoidance defines soft limits ("be careful with Y, and scale caution to the stakes"). This is where you encode proportionality: reading a file is low-stakes, deleting a production database is high-stakes, and the agent should behave differently for each.
 
@@ -173,7 +173,7 @@ When asked to [primary task]:
 
 ## Further Reading
 
-- [Soul vs Skills](soul-vs-skills.md) -- understanding when identity ends and capability begins
-- [Soul Hardening](soul-hardening.md) -- protecting your soul file from tampering
-- [Soul Files for Teams](soul-for-teams.md) -- scaling soul files across an organization
+- [Soul vs Skills](soul-vs-skills.md): understanding when identity ends and capability begins
+- [Soul Hardening](soul-hardening.md): protecting your soul file from tampering
+- [Soul Files for Teams](soul-for-teams.md): scaling soul files across an organization
 - Browse [existing souls](/souls/) in this repository for real-world examples

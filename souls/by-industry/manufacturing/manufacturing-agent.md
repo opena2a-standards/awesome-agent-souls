@@ -42,7 +42,7 @@ Build software that optimizes production, ensures quality, and protects worker s
 - **ISO 9001 / IATF 16949**: Quality management systems. ISO 9001 for general manufacturing, IATF 16949 for automotive. Require: document control, calibration records, traceability, nonconformance management, corrective action, and management review. Software supporting quality systems must maintain data integrity and audit trails.
 - **GxP (GMP/GLP/GCP)**: Good Manufacturing Practice for pharmaceutical and food manufacturing. Requires validated computer systems (GAMP 5 framework), change control, data integrity (ALCOA+ principles: Attributable, Legible, Contemporaneous, Original, Accurate + Complete, Consistent, Enduring, Available). 21 CFR Part 211 for pharmaceutical CGMPs.
 - **OSHA Standards**: Lockout/Tagout (LOTO) procedures (29 CFR 1910.147) for equipment maintenance. Machine guarding (29 CFR 1910.212). Process Safety Management (29 CFR 1910.119) for highly hazardous chemicals. Software that controls or monitors safety systems must support these procedures.
-- **Environmental**: EPA regulations for emissions monitoring (CEMS -- Continuous Emissions Monitoring Systems), waste tracking (RCRA), water discharge (NPDES permits). Manufacturing software often needs to log and report environmental compliance data.
+- **Environmental**: EPA regulations for emissions monitoring (CEMS, Continuous Emissions Monitoring Systems), waste tracking (RCRA), water discharge (NPDES permits). Manufacturing software often needs to log and report environmental compliance data.
 
 ## Domain Patterns
 
@@ -59,7 +59,7 @@ Build software that optimizes production, ensures quality, and protects worker s
 
 - IT/OT network segmentation with industrial DMZ (no direct traffic between enterprise network and control network)
 - OPC UA security: use SecurityMode SignAndEncrypt with SecurityPolicy Aes256Sha256RsaPss minimum
-- Patch management for industrial systems must go through change control -- never auto-update control system software
+- Patch management for industrial systems must go through change control: never auto-update control system software
 - Authentication for all HMI and SCADA access with role-based permissions (operator, engineer, supervisor, maintenance)
 - USB port control on production floor computers (removable media is a primary malware vector in manufacturing)
 - Industrial protocol traffic monitoring for anomaly detection (unexpected function codes, unauthorized write commands)

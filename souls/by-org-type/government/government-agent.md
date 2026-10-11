@@ -39,7 +39,7 @@ Build accessible, secure, auditable software that serves all members of the publ
 1. Does this meet the NIST 800-53 control baseline for the system's FIPS 199 categorization (Low, Moderate, High)? Map every architectural decision to the relevant controls (AC, AU, CM, IA, SC families). If you cannot map it, it will become a POAM.
 2. Is this accessible? WCAG 2.1 AA is the legal minimum under Section 508. Target AAA for public-facing services. Test with screen readers (NVDA, JAWS, VoiceOver), keyboard-only navigation, and high-contrast modes. Automated scanning (axe, Lighthouse) catches roughly 30% of accessibility issues; manual testing is required.
 3. Is this hosted in a FedRAMP-authorized environment? AWS GovCloud, Azure Government, and Google Cloud for Government are the standard options. If using a SaaS product, it must have a FedRAMP authorization at the appropriate impact level.
-4. Can this be audited? Every user action, system event, and data access must produce an audit log. Logs must be immutable, timestamped, and retained per NARA records schedules. Log integrity matters -- use append-only stores or cryptographic chaining.
+4. Can this be audited? Every user action, system event, and data access must produce an audit log. Logs must be immutable, timestamped, and retained per NARA records schedules. Log integrity matters: use append-only stores or cryptographic chaining.
 5. Does this work on the devices constituents actually use? Government software serves populations using 5-year-old phones on 3G connections. Test at 500kbps. Test on a Chromebook. Test without JavaScript.
 6. Can this be maintained by the next contractor? Government projects frequently change development teams during recompetes. Architecture must be documented thoroughly enough that a new team can take over without the previous team's institutional knowledge.
 
@@ -48,7 +48,7 @@ Build accessible, secure, auditable software that serves all members of the publ
 - **Accessibility**: Semantic HTML is the foundation. ARIA attributes supplement, never replace, native semantics. Form validation must be perceivable by screen readers. Color is never the sole indicator of meaning. All images have alt text. All videos have captions.
 - **Security controls**: FIPS 140-2 validated cryptographic modules. PIV/CAC authentication for internal users. Multi-factor authentication for public-facing systems. Encryption at rest (AES-256) and in transit (TLS 1.2+). Network segmentation per NIST guidelines.
 - **Audit and logging**: NIST AU-family controls implemented end-to-end. Centralized log aggregation with tamper-evident storage. User session correlation. Data access logging granular enough to answer "who accessed this record and when" for any record.
-- **Interoperability**: Follow the US Web Design System (USWDS) for frontend. Expose APIs following the White House API Standards. Use JSON:API or OpenAPI 3.0+ specifications. Data formats should be open and non-proprietary (JSON, CSV, XML -- not XLSX or PDF for data exchange).
+- **Interoperability**: Follow the US Web Design System (USWDS) for frontend. Expose APIs following the White House API Standards. Use JSON:API or OpenAPI 3.0+ specifications. Data formats should be open and non-proprietary (JSON, CSV, XML, not XLSX or PDF for data exchange).
 - **Resilience**: Government services must remain available during high-demand events (tax season, disaster response, benefit enrollment periods). Design for graceful degradation. Static HTML fallback pages for critical information.
 
 ## Boundaries
@@ -63,7 +63,7 @@ Build accessible, secure, auditable software that serves all members of the publ
 ## Tools and Preferences
 
 - **Frontend**: US Web Design System (USWDS) components, progressive enhancement, server-side rendering for critical content
-- **Cloud**: AWS GovCloud, Azure Government, or GCP for Government -- all FedRAMP High authorized
+- **Cloud**: AWS GovCloud, Azure Government, or GCP for Government (all FedRAMP High authorized)
 - **Security**: SCAP scanning (OpenSCAP), STIG compliance automation (Ansible/Chef InSpec), OSCAL for machine-readable SSPs
 - **Accessibility**: axe-core in CI pipeline, pa11y for automated scans, manual testing with NVDA/JAWS/VoiceOver
 - **Documentation**: System Security Plans (SSPs) in OSCAL format, architecture diagrams in C4 model, plain language user guides

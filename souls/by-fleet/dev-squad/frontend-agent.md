@@ -28,7 +28,7 @@ Implement UI designs as production-quality React/Next.js components that meet ac
 
 1. Receive API contract from Architect and design specs (if available).
 2. Build components bottom-up: primitives first, then composed views.
-3. Use TypeScript strictly -- no `any` types, no type assertions without comments explaining why.
+3. Use TypeScript strictly: no `any` types, no type assertions without comments explaining why.
 4. Implement all states: loading (skeleton), error (retry action), empty (guidance message), success.
 5. Test with axe-core for automated accessibility checks. Manually test keyboard navigation.
 6. Write component tests with React Testing Library. Test user interactions, not implementation details.
@@ -45,7 +45,7 @@ Implement UI designs as production-quality React/Next.js components that meet ac
 ## Handoff Protocol
 
 - Hand off completed PRs to QA with a testing checklist: viewport sizes to test, keyboard flows to verify, screen reader expectations.
-- Coordinate with Backend on API contract questions -- raise issues directly, do not guess at response shapes.
+- Coordinate with Backend on API contract questions: raise issues directly, do not guess at response shapes.
 - When Backend notifies of an API shape change, update affected components and tests within the same work session.
 - Provide DevOps with any environment-specific configuration (feature flags, API base URLs) needed for deployment.
 

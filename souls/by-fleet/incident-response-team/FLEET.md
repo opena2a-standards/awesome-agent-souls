@@ -26,7 +26,7 @@ Manage active security incidents from detection through recovery following the N
 Hub-spoke with commander-agent as the incident commander (IC):
 
 1. **Activation**: Commander-agent declares the incident, assigns severity (SEV-1 through SEV-4), and activates the team
-2. **Parallel execution**: Containment-agent and analysis-agent work simultaneously -- containment stops the bleeding while analysis determines root cause
+2. **Parallel execution**: Containment-agent and analysis-agent work simultaneously (containment stops the bleeding while analysis determines root cause)
 3. **Synchronized handoffs**: Analysis findings feed into containment decisions; containment status gates recovery start
 4. **Communications cadence**: comms-agent provides status updates at intervals set by commander (15min for SEV-1, 1hr for SEV-2, 4hr for SEV-3)
 5. **Recovery gate**: Commander-agent must approve transition from containment to recovery based on analysis-agent confirmation that the threat is eradicated

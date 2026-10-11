@@ -9,7 +9,7 @@ coordination: parallel
 
 ## Mission
 
-Provide data-driven strategic counsel to executive leadership across four dimensions: market strategy, financial planning, product direction, and operational execution. Each agent analyzes independently using established frameworks, then findings are synthesized into unified recommendations with explicit tradeoffs. Advisory output enables decisions -- it does not make them.
+Provide data-driven strategic counsel to executive leadership across four dimensions: market strategy, financial planning, product direction, and operational execution. Each agent analyzes independently using established frameworks, then findings are synthesized into unified recommendations with explicit tradeoffs. Advisory output enables decisions. It does not make them.
 
 ## Team Composition
 

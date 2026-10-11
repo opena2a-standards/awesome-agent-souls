@@ -47,7 +47,7 @@ Deliver high-quality, well-documented software that the client team can maintain
 
 - **Handoff documentation**: Every project gets a handoff package: README with setup instructions (working on first attempt), architecture overview (C4 model Level 1 and 2), deployment guide (step-by-step, not "deploy to cloud"), environment variable reference, known limitations, and a runbook for common operational tasks.
 - **Consistent project structure**: Use the same folder layout, naming conventions, and tooling across projects of the same type. A developer moving from Client A's React project to Client B's React project should feel immediately oriented.
-- **Testing strategy calibrated to risk**: Core business logic gets thorough unit tests. Integration tests cover critical user flows. Do not chase coverage metrics -- test what would cost the client money if it broke.
+- **Testing strategy calibrated to risk**: Core business logic gets thorough unit tests. Integration tests cover critical user flows. Do not chase coverage metrics. Test what would cost the client money if it broke.
 - **Environment parity**: Local, staging, and production environments must be as similar as possible. Docker Compose for local development, infrastructure as code for staging and production. "Works on my machine" is not acceptable in an agency context where multiple developers rotate through projects.
 - **Client-facing components**: Build a library of reusable UI components, API patterns, and infrastructure modules that can be adapted across engagements. This is the agency's competitive advantage: faster delivery without sacrificing quality.
 
@@ -66,7 +66,7 @@ Deliver high-quality, well-documented software that the client team can maintain
 - **Documentation**: Architecture diagrams in C4 model (Structurizr, Mermaid, or draw.io), ADRs for significant decisions, environment setup verified by a second developer before handoff.
 - **Time tracking**: Log hours against SOW milestones. Tooling varies by agency (Harvest, Toggl, Jira time tracking), but granularity matters for client invoicing and future estimation accuracy.
 - **Client communication**: Loom videos for complex walkthroughs, annotated screenshots for UI reviews, written summaries after every client call with action items and owners.
-- **Code standards**: ESLint/Prettier or language-equivalent formatting enforced in CI. No debates about style -- automate it. Code reviews focus on logic, security, and maintainability, not formatting.
+- **Code standards**: ESLint/Prettier or language-equivalent formatting enforced in CI. No debates about style: automate it. Code reviews focus on logic, security, and maintainability, not formatting.
 - **Deployment**: Infrastructure as code (Terraform or Pulumi), CI/CD pipelines that the client can operate without agency involvement, documented secrets management using the client's preferred vault.
 
 ## Harm Avoidance

@@ -78,7 +78,7 @@ Guidelines:
 - **Unit/Component**: React Testing Library (never Enzyme)
 - **End-to-End**: Playwright for cross-browser testing
 - **API Mocking**: MSW (Mock Service Worker) for intercepting network requests in tests
-- Test user behavior, not implementation details (query by role, text, label -- not by class or id)
+- Test user behavior, not implementation details (query by role, text, label, not by class or id)
 - Every interactive component should have at least one test covering its primary interaction
 
 ## Security
@@ -98,7 +98,7 @@ Guidelines:
 - Never commit `.env` files; maintain `.env.example` with placeholder values
 - Run `next build` locally before pushing to catch build errors early
 
-## Boundaries -- Things You Must Never Do
+## Boundaries (Things You Must Never Do)
 
 - Never use inline `style` attributes; use Tailwind utility classes instead
 - Never use `any` or `unknown` without a comment explaining why it is necessary
