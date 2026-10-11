@@ -872,6 +872,23 @@ describe('scanSoulProblems', () => {
   );
 });
 
+// A time bound alone passes a quadratic check when its input is short enough, so the linear time tests
+// compare the times at two sizes. Sixteen times the size takes sixteen times as long in a linear check
+// and 256 times as long in a quadratic one. LINEAR_TIME_RATIO lies four times above the first and four
+// times below the second, so a slower or busier machine leaves a linear check well under it, and a
+// quadratic check stays over it unless its fixed cost per call is about three times its quadratic cost
+// at the smaller size or more. Sizes only four times apart, with a bound of six, left a linear check as
+// little as 1.3 times under the bound.
+const LINEAR_TIME_RATIO = 64;
+
+// Returns how many times as long `time(size)` took as `time(size / 16)`, where `time` returns the time
+// taken by one check of the given size. Each time is the fastest of ten checks, so a pause during one
+// does not count.
+function timeRatio(time, size) {
+  const fastest = (n) => Math.min(...Array.from({ length: 10 }, () => time(n)));
+  return fastest(size) / fastest(size / 16);
+}
+
 describe('scannerCommand and scannerSpawn', () => {
   test('splits HACKMYAGENT into words and keeps a quoted word whole', () => {
     assert.equal(scannerCommand(undefined), null);
@@ -922,14 +939,8 @@ describe('scannerCommand and scannerSpawn', () => {
     const [built, elapsed] = build(100_000);
     assert.equal(built, `node " ${run}x" "a ${run}${run}" ^"${run}${run}\\^"x^"`);
     assert.ok(elapsed < 1000, `built in ${Math.round(elapsed)} ms`);
-    // A time bound alone passes a quadratic build when the run is short enough. Four times the
-    // backslashes take four times as long in a linear build and sixteen times as long in a quadratic
-    // one, so the times at two lengths are compared. Lengths only twice apart would leave a quadratic
-    // build with a large fixed cost per call close to the bound. Each time is the fastest of ten
-    // builds, so a pause during one does not count.
-    const fastest = (backslashes) => Math.min(...Array.from({ length: 10 }, () => build(backslashes)[1]));
-    const ratio = fastest(100_000) / fastest(25_000);
-    assert.ok(ratio < 6, `four times the backslashes took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio((backslashes) => build(backslashes)[1], 100_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the backslashes took ${ratio.toFixed(2)} times as long`);
   });
 });
 
@@ -2070,11 +2081,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     };
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    // As for the backslash runs above, the times at two lengths four times apart are compared, each the
-    // fastest of ten checks.
-    const fastest = (words) => Math.min(...Array.from({ length: 10 }, () => check(words)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the words took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the words took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a command is pinned when its words are separated by more than one space or a tab', () => {
@@ -2168,9 +2176,8 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.ok(short < 1000, `checked 30 words in ${Math.round(short)} ms`);
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    const fastest = (words) => Math.min(...Array.from({ length: 10 }, () => check(words)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the words took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the words took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a command at the end of a line is pinned when the line ends with CR LF', () => {
@@ -2253,9 +2260,8 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
     };
     const elapsed = read(20_000);
     assert.ok(elapsed < 1000, `read in ${Math.round(elapsed)} ms`);
-    const fastest = (spans) => Math.min(...Array.from({ length: 10 }, () => read(spans)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the spans took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(read, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the spans took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a sentence passes when still exits 1, as whole words, follows the words about hiding the finding', () => {
@@ -2280,9 +2286,8 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
     };
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    const fastest = (repeats) => Math.min(...Array.from({ length: 10 }, () => check(repeats)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the repeats took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the repeats took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
@@ -2665,9 +2670,8 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     };
     const elapsed = check(20_000);
     assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
-    const fastest = (commands) => Math.min(...Array.from({ length: 10 }, () => check(commands)));
-    const ratio = fastest(20_000) / fastest(5_000);
-    assert.ok(ratio < 6, `four times the commands took ${ratio.toFixed(2)} times as long`);
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the commands took ${ratio.toFixed(2)} times as long`);
   });
 
   test('a guard sign command at the end of a line is followed by --files when the line ends with CR LF', () => {
