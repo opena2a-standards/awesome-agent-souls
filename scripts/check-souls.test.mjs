@@ -1533,18 +1533,21 @@ function unnamedGuardSigns(file, text) {
 }
 
 // Returns the words after `npx --yes opena2a-cli@latest` in each distinct guard sign and guard verify
-// command in the texts. A command ends at a backtick, a # comment, &&, ;, | or the end of its line, which
-// ends at LF or CR LF. Its words are separated by spaces and tabs only, as the shell separates them, so the
-// opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as one word, as a shell would.
-// Quotes are not read: `--files "a b.md"` is read as the words `"a` and `b.md"`, so a test checks that no
-// command in the docs quotes a word.
+// command in the texts. A command ends at a backtick, a # comment, &, as in && or 2>&1, ;, |, a
+// redirection (< or >) or the end of its line, which ends at LF or CR LF. A number written just before a
+// redirection, as in 2>, names the file descriptor it opens, as in the shell, and is not a word. Its words
+// are separated by spaces and tabs only, as the shell separates them, so the opt-in run passes `--files`, a
+// no-break space and `SOUL.md` to opena2a-cli as one word, as a shell would. Quotes are not read:
+// `--files "a b.md"` is read as the words `"a` and `b.md"`, so a test checks that no command in the docs
+// quotes a word.
 function guardCommands(texts) {
   const commands = new Map();
   for (const [, text] of texts) {
     for (const line of text.split(/\r?\n/)) {
-      const matches = line.matchAll(/npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b[^`#&;|]*)/g);
-      for (const [, command] of matches) {
+      const matches = line.matchAll(/npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b[^`#&;|<>]*)([<>]?)/g);
+      for (const [, command, redirection] of matches) {
         const words = command.split(/[ \t]+/).filter((word) => word !== '');
+        if (redirection && !/[ \t]$/.test(command) && /^\d+$/.test(words.at(-1))) words.pop();
         commands.set(words.join(' '), words);
       }
     }
@@ -1814,6 +1817,32 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.deepEqual(guardCommands([['a.md', text]]), [
       ['guard', 'sign', '--files', 'SOUL.md'],
       ['guard', 'verify'],
+    ]);
+  });
+
+  test('ends a guard command at a redirection, and does not read the number of the file descriptor it opens as a word', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md > out',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md 2>&1',
+      'npx --yes opena2a-cli@latest guard verify</dev/null',
+      'npx --yes opena2a-cli@latest guard verify 2> verify.log',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'sign', '--files', 'SOUL.md'],
+      ['guard', 'verify'],
+    ]);
+  });
+
+  test('reads a number before a redirection as a word when a space or tab separates them, or other characters join it', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files 2 >out',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md2>out',
+      'npx --yes opena2a-cli@latest guard sign --files\t3\t2>out',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'sign', '--files', '2'],
+      ['guard', 'sign', '--files', 'SOUL.md2'],
+      ['guard', 'sign', '--files', '3'],
     ]);
   });
 
