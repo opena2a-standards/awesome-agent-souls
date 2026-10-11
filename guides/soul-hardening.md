@@ -26,7 +26,7 @@ Gradual, unintended changes to agent behavior over time. Multiple contributors e
 
 ### 1. Integrity Verification with ConfigGuard
 
-Cryptographically sign your soul file so any modification is detectable.
+Record a SHA-256 hash of your soul file so any later modification is detectable. The record is a hash, not a keyed signature: anyone who can edit the file can also run `guard sign --files SOUL.md` again, so review changes to `.opena2a/guard/` as you review changes to `SOUL.md`.
 
 ```bash
 # Sign after review and approval

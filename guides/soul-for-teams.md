@@ -92,7 +92,7 @@ Maintain a dedicated `org-souls` repository. Individual project repositories pul
 
 **Policy enforcement.** Every soul must include security boundaries and communication style at minimum. No soul may include instructions to disable security checks or bypass code review.
 
-**Audit trail.** Track every soul file version active in production, who approved it, and when it was deployed. Git history provides most of this; ConfigGuard signatures add cryptographic proof.
+**Audit trail.** Track every soul file version active in production, who approved it, and when it was deployed. Git history provides most of this; the SHA-256 hash ConfigGuard records for each signed file shows whether the file has changed since it was signed.
 
 **Drift detection.** Schedule periodic reviews to compare current soul files against the organization base, run OASB benchmarks for regressions, and check for contradictions between sections.
 

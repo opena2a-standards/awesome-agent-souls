@@ -267,6 +267,88 @@ describe('notAGitClone', { skip: !GIT_RUNS && 'git did not run' }, () => {
 
 const NOT_A_CLONE = notAGitClone(repoRoot);
 
+// CONTRIBUTING.md says accepted pull requests are squash-merged into `main`. Returns the ref that holds
+// the history of `main` in the clone at `dir`: origin/main where there is one, since a local main can be
+// behind it and the branch that is checked out can carry a merge of its own, or else main. Returns
+// undefined when the clone has neither, as after a clone of one other branch.
+function mainRef(dir) {
+  return ['refs/remotes/origin/main', 'refs/heads/main'].find(
+    (ref) => spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: dir }).status === 0,
+  );
+}
+
+// Returns the merge commits in the history of `revision`, newest first, each as its hash, a space and
+// its subject.
+function mergeCommits(dir, revision) {
+  const { status, stdout, stderr } = spawnSync('git', ['log', '--merges', '--format=%H %s', revision, '--'], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  assert.equal(status, 0, `git log failed: ${stderr}`);
+  return stdout.split('\n').filter(Boolean);
+}
+
+// Returns the merge commits that `guide` does not name. The guide names a commit by writing the first
+// seven or more characters of its hash in inline code.
+function unnamedMergeCommits(guide, commits) {
+  const named = [...guide.matchAll(/`([0-9a-f]{7,40})`/g)].map((match) => match[1]);
+  return commits.filter((commit) => !named.some((hash) => commit.startsWith(hash)));
+}
+
+describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && 'git did not run' }, () => {
+  let repo;
+  let git;
+  let merge;
+  let squashed;
+  before(() => {
+    repo = mkdtempSync(join(tmpdir(), 'check-souls-history-'));
+    git = (...args) => {
+      const identity = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com'];
+      const { status, stdout, stderr } = spawnSync('git', [...identity, ...args], {
+        cwd: repo,
+        encoding: 'utf8',
+        input: '',
+      });
+      assert.equal(status, 0, `git ${args[0]} failed: ${stderr}`);
+      return stdout.trim();
+    };
+    git('init', '--quiet');
+    // Every commit has the empty tree, so the history is built without a work tree or an index.
+    const tree = git('mktree');
+    const commit = (subject, ...parents) =>
+      git('commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', subject);
+    const base = commit('Base');
+    merge = commit('Merge side', commit('Other', base), commit('Side', base));
+    squashed = commit('Change (#1)', merge);
+    git('update-ref', 'refs/heads/main', merge);
+    git('update-ref', 'refs/remotes/origin/main', squashed);
+  });
+  after(() => rmSync(repo, { recursive: true, force: true }));
+
+  test('mergeCommits lists a commit with two parents and no commit with one', () => {
+    assert.deepEqual(mergeCommits(repo, squashed), [`${merge} Merge side`]);
+  });
+
+  test('unnamedMergeCommits accepts the start of a hash in inline code, and no shorter or unquoted one', () => {
+    const commits = [`${merge} Merge side`];
+    assert.deepEqual(unnamedMergeCommits(`The merge commit \`${merge.slice(0, 7)}\` is older.`, commits), []);
+    assert.deepEqual(unnamedMergeCommits(`The merge commit \`${merge}\` is older.`, commits), []);
+    assert.deepEqual(unnamedMergeCommits(`The merge commit \`${merge.slice(0, 6)}\` is older.`, commits), commits);
+    assert.deepEqual(unnamedMergeCommits(`The merge commit ${merge.slice(0, 7)} is older.`, commits), commits);
+    assert.deepEqual(unnamedMergeCommits(`The commit \`${squashed.slice(0, 7)}\` is newer.`, commits), commits);
+  });
+
+  test('mainRef names origin/main where the clone has one, then main, then nothing', () => {
+    assert.equal(mainRef(repo), 'refs/remotes/origin/main');
+    git('update-ref', '-d', 'refs/remotes/origin/main');
+    assert.equal(mainRef(repo), 'refs/heads/main');
+    git('update-ref', '-d', 'refs/heads/main');
+    assert.equal(mainRef(repo), undefined);
+  });
+});
+
+const MAIN_REF = NOT_A_CLONE ? undefined : mainRef(repoRoot);
+
 describe('this repository', () => {
   test('every soul and template meets the CONTRIBUTING.md requirements table', () => {
     const { problems, fileCount, ruleCount } = checkRepository(repoRoot);
@@ -303,6 +385,20 @@ describe('this repository', () => {
         : 'the repository has no CI workflow: CONTRIBUTING.md must say so',
     );
   });
+
+  test(
+    'CONTRIBUTING.md, which says pull requests are squash-merged, names every merge commit on main',
+    {
+      skip:
+        !MAIN_REF &&
+        `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no origin/main or main branch'}`,
+    },
+    () => {
+      const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
+      assert.match(guide, /squash-merged/);
+      assert.deepEqual(unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)), []);
+    },
+  );
 
   test('every template contains the role-play, jailbreak and act as refusal keywords', () => {
     for (const [file, text] of templateSouls()) {
@@ -1788,6 +1884,43 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
   });
 });
 
+// hackmyagent secure --ignore <check> keeps a finding out of the Findings list and does not clear it:
+// the report still counts the finding in its severity totals, its categories and its verdict, and the
+// command still exits 1. IGNORE_SENTENCE is a sentence that starts at an inline code span naming the
+// option, up to its period.
+const IGNORE_SENTENCE = /`--ignore\b[^`]*`[^.]*\./g;
+
+// Returns `<file>:<line>: <sentence>` for each IGNORE_SENTENCE in a markdown file. A line ends at LF or
+// CR LF.
+function ignoreSentences(file, text) {
+  return text.split(/\r?\n/).flatMap((line, index) =>
+    [...line.matchAll(IGNORE_SENTENCE)].map(([sentence]) => `${file}:${index + 1}: ${sentence}`),
+  );
+}
+
+describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () => {
+  test('reads each sentence that starts at --ignore, with its file and line', () => {
+    const text = 'Scan it.\n`--ignore CONFIG-002` hides the finding but still exits 1. Then reword.\r\nScan again.\r\n';
+    assert.deepEqual(ignoreSentences('a.md', text), [
+      'a.md:2: `--ignore CONFIG-002` hides the finding but still exits 1.',
+    ]);
+  });
+
+  test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
+    const sentences = docTexts().flatMap(([file, text]) => ignoreSentences(file, text));
+    for (const file of ['README.md', 'guides/soul-hardening.md']) {
+      assert.ok(
+        sentences.some((sentence) => sentence.startsWith(`${file}:`)),
+        `no sentence that starts at --ignore found in ${file}`,
+      );
+    }
+    assert.deepEqual(
+      sentences.filter((sentence) => !/ only hides the finding from the list; .*\bstill exits 1\b/.test(sentence)),
+      [],
+    );
+  });
+});
+
 // opena2a-cli guard sign reads a word after `sign` as the directory to search for config files, and the
 // search skips SOUL.md, so in a directory holding only SOUL.md, `guard sign SOUL.md` and `guard sign`
 // sign nothing. It signs the files named after --files.
@@ -2356,6 +2489,20 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
         ? `the repository now has ${GUARD_STORE}: guides/soul-hardening.md must say how to verify its souls`
         : 'the repository has no signature store: guides/soul-hardening.md must say its souls are not signed',
     );
+  });
+
+  // guard sign writes each file's SHA-256 hash to GUARD_STORE, with no key and no signature value, so anyone
+  // who can edit a soul can also sign it again. The documents call the record a hash and say so where they
+  // tell a reader to sign, rather than call it a cryptographic signature.
+  test('README.md, CONTRIBUTING.md and the guides call what guard sign records a hash, not a cryptographic signature', () => {
+    const texts = docTexts();
+    const claims = texts.flatMap(([file, text]) =>
+      text.split(/\r?\n/).flatMap((line, index) => (/cryptograph/i.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [])),
+    );
+    assert.deepEqual(claims, []);
+    for (const file of ['README.md', 'guides/soul-hardening.md']) {
+      assert.match(texts.find(([name]) => name === file)[1], /The record is a hash, not a keyed signature/, file);
+    }
   });
 
   test(

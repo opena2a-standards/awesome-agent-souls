@@ -470,7 +470,7 @@ In-depth guides for working with agent souls beyond copy-and-paste.
 
 ## Soul Integrity
 
-A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could be manipulated into violating its boundaries. Use [ConfigGuard](https://github.com/opena2a-org/opena2a) to cryptographically sign and verify your soul files.
+A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could be manipulated into violating its boundaries. Use [ConfigGuard](https://github.com/opena2a-org/opena2a) to record a SHA-256 hash of your soul files and check them against it.
 
 **Sign your soul file:**
 
@@ -478,7 +478,7 @@ A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could
 npx --yes opena2a-cli@latest guard sign --files SOUL.md
 ```
 
-This writes `.opena2a/guard/signatures.json`, which records the file's SHA-256 hash and when it was signed. Name each file after `--files`: a file name given without it is read as a directory to search, and nothing is signed.
+This writes `.opena2a/guard/signatures.json`, which records the file's SHA-256 hash and when it was signed. Name each file after `--files`: a file name given without it is read as a directory to search, and nothing is signed. The record is a hash, not a keyed signature: anyone who can edit `SOUL.md` can also run `guard sign --files SOUL.md` again, so review changes to `.opena2a/guard/` as you review changes to `SOUL.md`.
 
 **Verify before each session:**
 
@@ -522,7 +522,7 @@ The injection checks that read `SOUL.md` detect:
 - Instruction override attempts such as "ignore previous instructions", including ones hidden in a base64 payload (`CONFIG-002`, SOUL.md Injection Vectors)
 - Override instructions placed in an HTML comment, which readers of the rendered markdown do not see (`LIFECYCLE-007`)
 
-The command exits with status 1 when it finds a critical or high issue. The injection check matches patterns in the text, so ordinary wording can match one. `personal-assistant.md` has no HTML comment, and its one injection finding is a `CONFIG-002` match on `system:` in "Route to the correct system: tasks go to the task manager". Add `--json` to see the pattern a `CONFIG-002` finding matched, in its `message` field, and judge it in context. If the match is benign, reword the line so the pattern no longer appears, for example "Route to the correct system, so tasks go to the task manager", and scan again. `--ignore CONFIG-002` hides the finding but still exits 1.
+The command exits with status 1 when it finds a critical or high issue. The injection check matches patterns in the text, so ordinary wording can match one. `personal-assistant.md` has no HTML comment, and its one injection finding is a `CONFIG-002` match on `system:` in "Route to the correct system: tasks go to the task manager". Add `--json` to see the pattern a `CONFIG-002` finding matched, in its `message` field, and judge it in context. If the match is benign, reword the line so the pattern no longer appears, for example "Route to the correct system, so tasks go to the task manager", and scan again. `--ignore CONFIG-002` only hides the finding from the list; the summary and the verdict still count it, and the command still exits 1.
 
 Run this scan as part of your PR review process for any changes to `SOUL.md`.
 
