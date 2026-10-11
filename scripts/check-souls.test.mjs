@@ -1993,15 +1993,29 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 // hackmyagent secure --ignore <check> keeps a finding out of the Findings list and does not clear it:
 // the report still counts the finding in its severity totals, its categories and its verdict, and the
 // command still exits 1. IGNORE_SENTENCE is a sentence that starts at an inline code span naming the
-// option, up to its period.
-const IGNORE_SENTENCE = /`--ignore\b[^`]*`[^.]*\./g;
+// option, up to its period. A span that no period follows starts no sentence: IGNORE_SENTENCE matches it
+// up to the end of its line, with an empty group where the period would be, so the rest of a line is read
+// once, rather than once for every such span on it.
+const IGNORE_SENTENCE = /`--ignore\b[^`]*`[^.]*(\.|$)/g;
 
-// Returns `<file>:<line>: <sentence>` for each IGNORE_SENTENCE in a markdown file. A line ends at LF or
-// CR LF.
+// Returns `<file>:<line>: <sentence>` for each IGNORE_SENTENCE that ends at a period in a markdown file.
+// A line ends at LF or CR LF.
 function ignoreSentences(file, text) {
   return text.split(/\r?\n/).flatMap((line, index) =>
-    [...line.matchAll(IGNORE_SENTENCE)].map(([sentence]) => `${file}:${index + 1}: ${sentence}`),
+    [...line.matchAll(IGNORE_SENTENCE)]
+      .filter(([, period]) => period)
+      .map(([sentence]) => `${file}:${index + 1}: ${sentence}`),
   );
+}
+
+// IGNORE_ONLY_HIDES is the words that say the option only hides the finding from the list, with the text
+// that follows them, so that text is read once, rather than once for every repeat of the words.
+const IGNORE_ONLY_HIDES = / only hides the finding from the list; (.*)/g;
+
+// Whether a sentence about --ignore says that the option only hides the finding from the list and, after
+// that, that the command still exits 1.
+function saysIgnoreOnlyHides(sentence) {
+  return [...sentence.matchAll(IGNORE_ONLY_HIDES)].some(([, rest]) => /\bstill exits 1\b/.test(rest));
 }
 
 describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () => {
@@ -2012,6 +2026,64 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
     ]);
   });
 
+  test('reads a sentence up to the first period after its --ignore code span, and none when no period follows', () => {
+    const text = [
+      '`--ignore A` and `--ignore B` each hide one. `--ignore C` and `--ignore D` then follow',
+      '`--ignore a.b` names a check with a period in its name',
+      '`--ignore a.b` does too. So does `--ignore c.d`.',
+      'An `--ignore x. that is not closed',
+    ].join('\n');
+    assert.deepEqual(ignoreSentences('a.md', text), [
+      'a.md:1: `--ignore A` and `--ignore B` each hide one.',
+      'a.md:3: `--ignore a.b` does too.',
+      'a.md:3: `--ignore c.d`.',
+    ]);
+  });
+
+  test('reads a long line of --ignore code spans that no period follows in linear time', () => {
+    // Returns the time taken to read a line of the given number of --ignore code spans with no period.
+    // Reading the rest of the line from each span took time that grew with the square of the number of
+    // spans: twice the spans, four times as long.
+    const read = (spans) => {
+      const line = '`--ignore x` '.repeat(spans);
+      const start = performance.now();
+      assert.deepEqual(ignoreSentences('a.md', line), []);
+      return performance.now() - start;
+    };
+    const elapsed = read(20_000);
+    assert.ok(elapsed < 1000, `read in ${Math.round(elapsed)} ms`);
+    const fastest = (spans) => Math.min(...Array.from({ length: 10 }, () => read(spans)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the spans took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('a sentence passes when still exits 1, as whole words, follows the words about hiding the finding', () => {
+    const hides = 'a.md:1: `--ignore X` only hides the finding from the list; ';
+    assert.equal(saysIgnoreOnlyHides(`${hides}the command still exits 1.`), true);
+    assert.equal(saysIgnoreOnlyHides(`${hides}it only hides the finding from the list; it still exits 1.`), true);
+    assert.equal(saysIgnoreOnlyHides(`${hides}the command exits 0.`), false);
+    assert.equal(saysIgnoreOnlyHides(`${hides}the command still exits 10.`), false);
+    assert.equal(saysIgnoreOnlyHides('a.md:1: `--ignore X` still exits 1 and only hides the finding from the list; '), false);
+    assert.equal(saysIgnoreOnlyHides('a.md:1: `--ignore X` clears the finding and the command still exits 1.'), false);
+  });
+
+  test('checks a long sentence that repeats the words about hiding in linear time', () => {
+    // Returns the time taken to check a sentence of the given number of repeats of those words, which
+    // never says that the command still exits 1. Reading the rest of the sentence from each repeat took
+    // time that grew with the square of the number of repeats: twice the repeats, four times as long.
+    const check = (repeats) => {
+      const sentence = ' only hides the finding from the list; '.repeat(repeats);
+      const start = performance.now();
+      assert.equal(saysIgnoreOnlyHides(sentence), false);
+      return performance.now() - start;
+    };
+    const elapsed = check(20_000);
+    assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+    const fastest = (repeats) => Math.min(...Array.from({ length: 10 }, () => check(repeats)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the repeats took ${ratio.toFixed(2)} times as long`);
+  });
+
   test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
     const sentences = docTexts().flatMap(([file, text]) => ignoreSentences(file, text));
     for (const file of ['README.md', 'guides/soul-hardening.md']) {
@@ -2020,10 +2092,7 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
         `no sentence that starts at --ignore found in ${file}`,
       );
     }
-    assert.deepEqual(
-      sentences.filter((sentence) => !/ only hides the finding from the list; .*\bstill exits 1\b/.test(sentence)),
-      [],
-    );
+    assert.deepEqual(sentences.filter((sentence) => !saysIgnoreOnlyHides(sentence)), []);
   });
 });
 
