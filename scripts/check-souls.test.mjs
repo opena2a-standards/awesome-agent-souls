@@ -2382,6 +2382,12 @@ function textStart(line, index = 0, column = 0) {
 // is read, so an item inside another is a line of the outer one. Paragraphs are not read: a line with
 // less indentation ends an item even where CommonMark reads it as more of the item's paragraph, and a
 // marker starts an item even where CommonMark reads its line as part of the paragraph before it.
+// Two of these limits change nothing that docSection reads: the three columns before a marker, and the
+// nine digits of ITEM_MARKER. Past either one, the marker's line is indented four columns or more, or its
+// text starts with ten digits or more, and the content after the marker is indented six columns or more.
+// A fence is indented at most three spaces and a heading none, so no line of an item read there would be
+// a fence or a heading. listItem keeps both limits, so that it reads an item as CommonMark does, and each
+// is tested on listItem itself.
 function listItem(line, open) {
   const text = textStart(line);
   const blank = text.index === line.length;
@@ -3068,6 +3074,26 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     }
     for (const first of ['1. Item', '-  Item', ' - Item', '-\tItem', '    - Item', '-Item', '* * *', '- - -', '-\n', '1234567890. Item']) {
       assert.deepEqual(read(first), [`${first}\n  \`\`\`\n# B\n  \`\`\``, undefined, ''], JSON.stringify(first));
+    }
+  });
+
+  // The lines `    - Item` and `1234567890. Item` above are read the same whether or not they start an
+  // item, as the comment on listItem says of its limits of three columns and nine digits. So each limit
+  // is tested on listItem itself, with a line on each side of it, one column or one digit apart.
+  test('starts a list item at a marker indented three columns, and none at a marker indented four', () => {
+    // The item that a line ends does not change the limit: the line can start an item of its own.
+    for (const open of [null, { column: 11, bare: false }]) {
+      assert.deepEqual(listItem('   - Item', open), { column: 5, bare: false });
+      assert.equal(listItem('    - Item', open), null);
+      // A tab is four columns.
+      assert.equal(listItem('\t- Item', open), null);
+    }
+  });
+
+  test('reads a number of nine digits as the marker of a list item, and a number of ten digits as none', () => {
+    for (const end of ['.', ')']) {
+      assert.deepEqual(listItem(`123456789${end} Item`, null), { column: 11, bare: false }, end);
+      assert.equal(listItem(`1234567890${end} Item`, null), null, end);
     }
   });
 
