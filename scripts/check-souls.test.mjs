@@ -2313,6 +2313,9 @@ describe('this test file', () => {
       '// Then a colon:',
       '// `guard verify`.',
       '// (A sentence.)',
+      '// [A sentence.]',
+      '// Then "a quote."',
+      "// Then 'a quote.'",
       '// The last line',
     ];
     assert.deepEqual(shortCommentLines(lines), [
