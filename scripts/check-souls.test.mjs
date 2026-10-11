@@ -1609,9 +1609,10 @@ function unnamedGuardSigns(file, text) {
 
 // A guard sign or guard verify command after `npx --yes opena2a-cli@latest`, and the < or > that ends it, if
 // one does. A < or > followed by ( does not end it and is kept in its word, as NPX_PINNED and
-// GUARD_SIGN_FILES read it. guardCommands reads it.
+// GUARD_SIGN_FILES read it. The command takes every such < or >, so the < or > after it is never followed by
+// ( and needs no check. guardCommands reads it.
 const GUARD_COMMAND = new RegExp(
-  String.raw`npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b(?:(?!(?<![ \t.])${SENTENCE_PERIOD.source})(?:[^\`#&;|()<>]|(?<![ \t])#|[<>](?=\()))*)((?:[<>](?!\())?)`,
+  String.raw`npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b(?:(?!(?<![ \t.])${SENTENCE_PERIOD.source})(?:[^\`#&;|()<>]|(?<![ \t])#|[<>](?=\()))*)([<>]?)`,
   'g',
 );
 
@@ -2064,6 +2065,22 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       ['guard', 'sign', '--files', 'a.md', '2<'],
       ['guard', 'verify', '<'],
     ]);
+  });
+
+  test('never reads a < or > followed by ( as the redirection that ends a guard command', () => {
+    // Every sequence of up to three of these after `guard verify`: 8,421 lines.
+    const tokens = [' ', '\t', '<', '>', '(', ')', '#', ';', '|', '&', '`', '.', '2', 'a', '--files', ' ', '"', '*', '_', ']'];
+    let tails = [''];
+    for (let length = 0; length <= 3; length += 1) {
+      if (length > 0) tails = tails.flatMap((tail) => tokens.map((token) => tail + token));
+      for (const tail of tails) {
+        const line = `npx --yes opena2a-cli@latest guard verify${tail}`;
+        for (const match of line.matchAll(GUARD_COMMAND)) {
+          const next = line[match.index + match[0].length];
+          assert.ok(match[2] === '' || next !== '(', `${JSON.stringify(line)} ends its command at ${match[2]}(`);
+        }
+      }
+    }
   });
 
   test('every guard sign command is followed by --files, and one signs SOUL.md and one verifies it', () => {
