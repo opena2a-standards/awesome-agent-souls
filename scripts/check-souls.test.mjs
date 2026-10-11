@@ -3463,16 +3463,40 @@ describe('this test file', () => {
     const lastEnd = text.lastIndexOf('*/');
     let lastTick = -1;
     for (const { 0: tick, index } of text.matchAll(/(?<!\\)(?:\\\\)*`/g)) lastTick = index + tick.length - 1;
+    // The place of the slash that ends the pattern of a regular expression literal from each place on, read
+    // as code or as the inside of a character class, as LITERAL reads them, or -1 if a line break or the end
+    // of the text comes first. Each place is read once, from the end of the text back, so a slash starts a
+    // regular expression literal only when the slash that ends it lies ahead, and a class that no `]` ends,
+    // or one that holds the slashes after it, is not searched once for each.
+    const codeEnds = new Int32Array(text.length + 2).fill(-1);
+    const classEnds = new Int32Array(text.length + 2).fill(-1);
+    for (let at = text.length - 1; at >= 0; at -= 1) {
+      // A backslash escapes the character after it, unless that character ends a line, as `.` does not
+      // match one.
+      if (text[at] === '\\' && /./.test(text.charAt(at + 1))) {
+        codeEnds[at] = codeEnds[at + 2];
+        classEnds[at] = classEnds[at + 2];
+      } else if (text[at] !== '\\' && text[at] !== '\n') {
+        codeEnds[at] = text[at] === '/' ? at : text[at] === '[' ? classEnds[at + 1] : codeEnds[at + 1];
+        classEnds[at] = text[at] === ']' ? codeEnds[at + 1] : classEnds[at + 1];
+      }
+    }
     for (let at = 0; at < text.length; ) {
       const comment = text.startsWith('/*', at) && at + 2 <= lastEnd;
       const unended = text[at] === '`' && at >= lastTick;
+      // A slash that starts no line comment is code when no regular expression literal ends after it, or
+      // when the code before it ends with a name, a number or a closing bracket and no `*` comes next.
+      const divides =
+        text[at] === '/' &&
+        text[at + 1] !== '/' &&
+        (codeEnds[at + 1] === -1 || (text[at + 1] !== '*' && /[\w$)\]]/.test(last)));
       LITERAL.lastIndex = at;
       const [literal] = comment
         ? [text.slice(at, text.indexOf('*/', at + 2) + 2)]
-        : unended
+        : unended || divides
           ? []
           : (LITERAL.exec(text) ?? []);
-      if (literal === undefined || (/^\/[^/*]/.test(literal) && /[\w$)\]]/.test(last))) {
+      if (literal === undefined) {
         code += text[at];
         if (/\S/.test(text[at])) last = text[at];
         at += 1;
@@ -4550,6 +4574,28 @@ describe('this test file', () => {
     for (const make of makers) {
       const ratio = timeRatio(timer(make), 8_000);
       assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the backticks took ${ratio.toFixed(2)} times as long`);
+    }
+  });
+
+  test('checks a long line of slashes that start no regular expression literal, or that divide, in linear time', () => {
+    // Returns a function that takes the time to check the line that `make` makes with the given number of
+    // slashes. Searching to the end of the line for the end of a regular expression literal at each slash,
+    // when a character class that no `]` ends, or one that a slash does not follow, holds the slashes after
+    // it, or when the slash divides, took time that grew with the square of the number of slashes.
+    const timer = (make) => (count) => {
+      const lines = [make(count)];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const makers = [
+      (count) => '/[ '.repeat(count),
+      (count) => `${'/[ '.repeat(count)}]`,
+      (count) => `x${'/[a'.repeat(count)}]/`,
+    ];
+    for (const make of makers) {
+      const ratio = timeRatio(timer(make), 8_000);
+      assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the slashes took ${ratio.toFixed(2)} times as long`);
     }
   });
 
