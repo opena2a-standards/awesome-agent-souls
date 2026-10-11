@@ -120,6 +120,12 @@ describe('findProseProblems', () => {
     assert.deepEqual(problems(`\`\` ${spans}\`a -- b`), [`1:${spans.length + 7} ${HYPHENS}`]);
   });
 
+  test('reports every dash on a line of many dashes', () => {
+    const found = findProseProblems(EM_DASH.repeat(130_000));
+    assert.equal(found.length, 130_000);
+    assert.deepEqual(found.at(-1), { line: 1, column: 130_000, problem: 'em dash' });
+  });
+
   test('reports a heading named Why this exists or Why this matters, at any level and in any case', () => {
     const text = [
       '## Why this exists',

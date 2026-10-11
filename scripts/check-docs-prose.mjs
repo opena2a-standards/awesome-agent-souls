@@ -3,11 +3,11 @@
 //
 // Usage: node scripts/check-docs-prose.mjs [--help]
 //
-// Prose is written without a dash. A double hyphen that stands alone between spaces, an em dash and
-// an en dash that stands alone between spaces are each reported, and so is a heading named "Why this
+// Prose is written without a dash. An em dash, and a double hyphen or an en dash with a space or the
+// start or end of the line on each side, are each reported, and so is a heading named "Why this
 // exists" or "Why this matters". A fenced code block and an inline code span are not prose, so a
 // command keeps its `--` separator and its `--flag` options. The files checked are the .md and .mdx
-// files git tracks, so a file that has not been added to git is not checked.
+// files git tracks that isChecked accepts, so a file that has not been added to git is not checked.
 
 import { spawnSync } from 'node:child_process';
 import { lstatSync, readFileSync } from 'node:fs';
@@ -103,7 +103,8 @@ export function findProseProblems(text) {
         found.push({ line: index + 1, column: match.index + 1, problem: name(match) });
       }
     }
-    problems.push(...found.sort((a, b) => a.column - b.column));
+    // One push per problem: spreading a line of over a hundred thousand dashes into push overflows the stack.
+    for (const problem of found.sort((a, b) => a.column - b.column)) problems.push(problem);
   }
   return problems;
 }
