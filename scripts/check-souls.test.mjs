@@ -2299,6 +2299,7 @@ describe('this test file', () => {
   test('reports a short comment line that ends inside a sentence, whatever the next line starts with', () => {
     const lines = [
       `// ${'a'.repeat(97)}`,
+      '// as in `--files .`',
       '// as NPX_PINNED and',
       '// GUARD_SIGN_FILES read',
       '// it. A sentence.',
@@ -2309,7 +2310,8 @@ describe('this test file', () => {
     ];
     assert.deepEqual(shortCommentLines(lines), [
       "line 2 is 20 columns wide; its comment's widest is 100",
-      "line 3 is 24 columns wide; its comment's widest is 100",
+      "line 3 is 20 columns wide; its comment's widest is 100",
+      "line 4 is 24 columns wide; its comment's widest is 100",
     ]);
   });
 
