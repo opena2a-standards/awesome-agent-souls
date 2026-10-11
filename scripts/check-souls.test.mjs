@@ -136,6 +136,31 @@ function unmentionedStandards(readme, readSoul) {
   return { problems, names };
 }
 
+// Reads the table in the By Use Case section of a README and returns, for each row, the file its first
+// cell links and the comma-separated names in its Popular Platforms cell.
+function useCasePlatforms(readme) {
+  const section = readme.split(/^## /m).find((part) => part.startsWith('By Use Case'));
+  assert.ok(section !== undefined, 'README.md: By Use Case section not found');
+  const rows = section
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('|'))
+    .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()));
+  const column = rows[0]?.indexOf('Popular Platforms') ?? -1;
+  assert.ok(column >= 0, 'README.md: the By Use Case table has no Popular Platforms column');
+  return rows.slice(2).map((cells) => ({
+    file: cells[0].match(/\]\(([^)]+)\)/)?.[1],
+    platforms: cells[column].split(',').map((name) => name.trim()).filter(Boolean),
+  }));
+}
+
+// Returns the names in `platforms` that `text` does not contain as a whole word, matched with case.
+function missingPlatforms(text, platforms) {
+  return platforms.filter((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return !new RegExp(`(?<![\\w/])${escaped}(?![\\w/])`).test(text);
+  });
+}
+
 // Runs `<command> scan-soul <dir> --json` on each soul, saved as SOUL.md in a temporary directory,
 // and returns one line per problem. A scan that runs longer than `timeout` milliseconds is stopped, and
 // no later soul is scanned.
@@ -285,6 +310,41 @@ describe('this repository', () => {
         assert.match(text, new RegExp(`\\b${term}\\b`, 'i'), `${file} lacks the role-play refusal line (${term})`);
       }
     }
+  });
+
+  test('every By Use Case soul names each platform its README row lists under Popular Platforms', () => {
+    const rows = useCasePlatforms(readFileSync(join(repoRoot, 'README.md'), 'utf8'));
+    assert.ok(rows.length > 0, 'README.md: the By Use Case table has no rows');
+    const problems = [];
+    for (const { file, platforms } of rows) {
+      assert.ok(file, 'README.md: a By Use Case row does not link its soul');
+      assert.ok(platforms.length > 0, `README.md: the By Use Case row for ${file} lists no platforms`);
+      for (const name of missingPlatforms(readFileSync(join(repoRoot, file), 'utf8'), platforms)) {
+        problems.push(`${file}: does not mention ${name}, which README.md lists under Popular Platforms`);
+      }
+    }
+    assert.deepEqual(problems, []);
+  });
+
+  test('reads the Popular Platforms cell of each By Use Case row and matches names as whole words', () => {
+    const readme = [
+      '## By Use Case (1 soul)',
+      '',
+      '| Soul | Focus | Popular Platforms |',
+      '|------|-------|-------------------|',
+      '| [helper](souls/by-use-case/helper.md) | Notes | X/Twitter, Microsoft Teams |',
+      '',
+      '## By Fleet',
+      '',
+      '| Fleet | Agents |',
+      '|-------|--------|',
+      '| [crew](souls/by-fleet/crew/) | lead |',
+    ].join('\r\n');
+    assert.deepEqual(useCasePlatforms(readme), [
+      { file: 'souls/by-use-case/helper.md', platforms: ['X/Twitter', 'Microsoft Teams'] },
+    ]);
+    assert.deepEqual(missingPlatforms('Post on X/Twitter and in Microsoft Teams.', ['X/Twitter', 'Microsoft Teams']), []);
+    assert.deepEqual(missingPlatforms('Small teams post on Twitter.', ['Teams', 'X/Twitter']), ['Teams', 'X/Twitter']);
   });
 
   test('reads the Minimal Template from a guide whose lines end with CR LF', () => {
