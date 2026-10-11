@@ -107,10 +107,31 @@ function templateSouls() {
 // The README.md tables whose last column names the standards and regulations each soul covers.
 const STANDARDS_TABLES = ['By Industry', 'By Organization Type'];
 
+// A word that marks a standard or regulation name: it contains a digit or two capital letters, such as
+// GLBA, 62443 or FedRAMP.
+const NAME_WORD = /\d|[A-Z].*[A-Z]/;
+
+// Returns the standard and regulation names in the last cell of a STANDARDS_TABLES row. Commas and slashes
+// split the cell into parts, and a part with a NAME_WORD holds one name, which runs from its first
+// NAME_WORD to its last, so FDA 21 CFR Part 11 is one name and OSHA reporting requirements is OSHA. When
+// the first NAME_WORD has no letter, the name starts at the word before it, so Section 508 is one name,
+// not 508. A part with no NAME_WORD, such as attorney-client privilege, holds no name.
+function standardNames(cell) {
+  const names = [];
+  for (const part of cell.split(/[,/]/)) {
+    const words = part.trim().split(/\s+/);
+    const first = words.findIndex((word) => NAME_WORD.test(word));
+    if (first < 0) continue;
+    const last = words.findLastIndex((word) => NAME_WORD.test(word));
+    const start = first > 0 && !/[A-Za-z]/.test(words[first]) ? first - 1 : first;
+    names.push(words.slice(start, last + 1).join(' '));
+  }
+  return names;
+}
+
 // Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
-// one problem for each name in it that the soul the row links to does not mention, and the number of
-// names read. A name is a word of that column that contains a digit or two capital letters, such as
-// GLBA, 62443 or FedRAMP; a phrase with no such word, such as attorney-client privilege, is not read.
+// one problem for each name `standardNames` reads from it that the soul the row links to does not
+// mention, and the number of names read. The soul may break a name of several words across lines.
 // `readSoul` returns the text of a file the README links to.
 function unmentionedStandards(readme, readSoul) {
   const problems = [];
@@ -126,9 +147,9 @@ function unmentionedStandards(readme, readSoul) {
     const link = table && cells[0]?.match(/^\[[^\]]*\]\(([^)]+)\)$/);
     if (!link) continue;
     const soul = readSoul(link[1]);
-    for (const name of cells.at(-1).split(/[\s,/]+/).filter((word) => /\d|[A-Z].*[A-Z]/.test(word))) {
+    for (const name of standardNames(cells.at(-1))) {
       names += 1;
-      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '\\s+');
       if (!new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i').test(soul)) {
         problems.push(`${link[1]}: the README.md ${table} table names ${name}, which the soul does not mention`);
       }
@@ -483,15 +504,65 @@ describe('unmentionedStandards', () => {
     assert.deepEqual(unmentionedStandards(readme, (path) => souls[path]), {
       problems: [
         'souls/fintech.md: the README.md By Industry table names GLBA, which the soul does not mention',
-        'souls/plant.md: the README.md By Industry table names 62443, which the soul does not mention',
+        'souls/plant.md: the README.md By Industry table names IEC 62443, which the soul does not mention',
       ],
-      names: 7,
+      names: 6,
     });
   });
 
   test('accepts a soul that mentions every name', () => {
     const covered = { ...souls, 'souls/fintech.md': 'PCI-DSS, KYC, AML and GLBA.', 'souls/plant.md': 'IEC 62443, OSHA.' };
     assert.deepEqual(unmentionedStandards(readme, (path) => covered[path]).problems, []);
+  });
+
+  test('reads a name with a number as one name, and not as bare numbers the soul can match elsewhere', () => {
+    const regulations = [
+      '## By Industry (1 soul)',
+      '',
+      '| Soul | Focus | Key Standards and Regulations |',
+      '|------|-------|-------------------------------|',
+      '| [health](souls/health.md) | Patient data | HIPAA, FDA 21 CFR Part 11 |',
+      '',
+      '## By Organization Type (1 soul)',
+      '',
+      '| Soul | Focus | Key Constraints |',
+      '|------|-------|-----------------|',
+      '| [gov](souls/gov.md) | Citizen services | FedRAMP, Section 508, ATO process |',
+    ].join('\n');
+    const pieces = {
+      'souls/health.md': 'HIPAA applies. FDA guidance cites CFR title 21, step 11.',
+      'souls/gov.md': 'FedRAMP and ATO apply to 508 systems.',
+    };
+    assert.deepEqual(unmentionedStandards(regulations, (path) => pieces[path]), {
+      problems: [
+        'souls/health.md: the README.md By Industry table names FDA 21 CFR Part 11, which the soul does not mention',
+        'souls/gov.md: the README.md By Organization Type table names Section 508, which the soul does not mention',
+      ],
+      names: 5,
+    });
+    const named = {
+      'souls/health.md': 'HIPAA and FDA 21 CFR\nPart 11 apply.',
+      'souls/gov.md': 'FedRAMP, the ATO and section 508 apply.',
+    };
+    assert.deepEqual(unmentionedStandards(regulations, (path) => named[path]).problems, []);
+  });
+});
+
+describe('standardNames', () => {
+  test('reads each part between commas and slashes from its first name word to its last', () => {
+    assert.deepEqual(standardNames('HIPAA, HL7 FHIR, FDA 21 CFR Part 11, IEC 62304'), [
+      'HIPAA',
+      'HL7 FHIR',
+      'FDA 21 CFR Part 11',
+      'IEC 62304',
+    ]);
+    assert.deepEqual(standardNames('ISO 9001, IEC 62443, OSHA reporting requirements'), ['ISO 9001', 'IEC 62443', 'OSHA']);
+    assert.deepEqual(standardNames('PCI-DSS, KYC/AML, IL4/IL5, WCAG 2.1 AA'), ['PCI-DSS', 'KYC', 'AML', 'IL4', 'IL5', 'WCAG 2.1 AA']);
+  });
+
+  test('reads a leading number with the word before it, and skips a part with no name word', () => {
+    assert.deepEqual(standardNames('FedRAMP, Section 508, ATO process, FISMA'), ['FedRAMP', 'Section 508', 'ATO', 'FISMA']);
+    assert.deepEqual(standardNames('21 CFR Part 11, Fair Housing Act, attorney-client privilege'), ['21 CFR Part 11']);
   });
 });
 
