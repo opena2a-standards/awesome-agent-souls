@@ -1788,6 +1788,43 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
   });
 });
 
+// hackmyagent secure --ignore <check> keeps a finding out of the Findings list and changes nothing else:
+// the report still counts the finding in its severity totals, its categories and its verdict, and the
+// command still exits 1. IGNORE_SENTENCE is a sentence that starts at an inline code span naming the
+// option, up to its period.
+const IGNORE_SENTENCE = /`--ignore\b[^`]*`[^.]*\./g;
+
+// Returns `<file>:<line>: <sentence>` for each IGNORE_SENTENCE in a markdown file. A line ends at LF or
+// CR LF.
+function ignoreSentences(file, text) {
+  return text.split(/\r?\n/).flatMap((line, index) =>
+    [...line.matchAll(IGNORE_SENTENCE)].map(([sentence]) => `${file}:${index + 1}: ${sentence}`),
+  );
+}
+
+describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () => {
+  test('reads each sentence that starts at --ignore, with its file and line', () => {
+    const text = 'Scan it.\n`--ignore CONFIG-002` hides the finding but still exits 1. Then reword.\r\nScan again.\r\n';
+    assert.deepEqual(ignoreSentences('a.md', text), [
+      'a.md:2: `--ignore CONFIG-002` hides the finding but still exits 1.',
+    ]);
+  });
+
+  test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
+    const sentences = docTexts().flatMap(([file, text]) => ignoreSentences(file, text));
+    for (const file of ['README.md', 'guides/soul-hardening.md']) {
+      assert.ok(
+        sentences.some((sentence) => sentence.startsWith(`${file}:`)),
+        `no sentence that starts at --ignore found in ${file}`,
+      );
+    }
+    assert.deepEqual(
+      sentences.filter((sentence) => !/ only hides the finding from the list; .*\bstill exits 1\b/.test(sentence)),
+      [],
+    );
+  });
+});
+
 // opena2a-cli guard sign reads a word after `sign` as the directory to search for config files, and the
 // search skips SOUL.md, so in a directory holding only SOUL.md, `guard sign SOUL.md` and `guard sign`
 // sign nothing. It signs the files named after --files.
