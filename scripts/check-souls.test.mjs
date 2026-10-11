@@ -2352,6 +2352,50 @@ const HASH_NOTE_SECTIONS = [
   ['guides/soul-hardening.md', '### 1. Integrity Verification with ConfigGuard'],
 ];
 
+// The marker of a list item, at the start of a line's text: -, + or *, or one to nine digits and a . or ),
+// before a space, a tab or the end of the line.
+const ITEM_MARKER = /^(?:[-+*]|\d{1,9}[.)])(?=[ \t]|$)/;
+
+// A thematic break, as the whole text of a line: three or more of -, * or _, with only spaces or tabs
+// between and after them. `- - -` and `* * *` are breaks, not list items.
+const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+
+// Returns the index and the column of the first character of `line`, at or after `index`, that is not a
+// space or a tab. `column` is the column of `index`. A tab moves to the next multiple of four columns, as
+// in CommonMark.
+function textStart(line, index = 0, column = 0) {
+  for (; index < line.length; index += 1) {
+    if (line[index] === ' ') column += 1;
+    else if (line[index] === '\t') column += 4 - (column % 4);
+    else break;
+  }
+  return { index, column };
+}
+
+// Returns the list item that `line` is in, or null when it is in none. `open` is the item the line before
+// was in, or null. An item is { column, bare }: the column where its content starts, and whether it has
+// only its marker so far. Items are read as in CommonMark. An item starts at a marker indented at most
+// three columns. Its content starts after the marker and its one to four columns of spaces or tabs, or
+// one column after the marker when more follow or the line ends there. The item holds each later line
+// indented to that column or further and each blank line, and ends at the first other line, which can
+// start an item of its own. An item with only its marker ends at a blank line. Only the outermost item
+// is read, so an item inside another is a line of the outer one. Paragraphs are not read: a line with
+// less indentation ends an item even where CommonMark reads it as more of the item's paragraph, and a
+// marker starts an item even where CommonMark reads its line as part of the paragraph before it.
+function listItem(line, open) {
+  const text = textStart(line);
+  const blank = text.index === line.length;
+  if (open !== null && (blank ? !open.bare : text.column >= open.column)) return { column: open.column, bare: false };
+  if (blank || text.column > 3) return null;
+  const rest = line.slice(text.index);
+  const marker = THEMATIC_BREAK.test(rest) ? undefined : rest.match(ITEM_MARKER)?.[0];
+  if (marker === undefined) return null;
+  const end = text.column + marker.length;
+  const content = textStart(line, text.index + marker.length, end);
+  const bare = content.index === line.length;
+  return { column: bare || content.column - end > 4 ? end + 1 : content.column, bare };
+}
+
 // Returns the text under the heading line `heading` in a markdown `text`: the lines after the first such
 // line, up to the next heading of the same or a higher level or to the end of the text, so a section keeps
 // its subsections. `heading` is the whole line, with its # marks. A line inside a fenced code block is not
@@ -2359,20 +2403,27 @@ const HASH_NOTE_SECTIONS = [
 // CommonMark: a fence opens on three or more backticks or tildes indented at most three spaces, where a
 // backtick fence's info string has no backtick, and closes on a line of the same character, at least as
 // long, with nothing after it but spaces or tabs. A line indented four or more spaces opens no fence.
+// Nor does a line of a list item, as listItem reads it: a code block inside an item, as in `- ```` and
+// then `  ````, is part of the item, so the fence that closes it does not open a block that runs on past
+// the next heading. A line of a block quote starts with >, so it is neither a fence nor a heading, and a
+// code block inside a quote ends with the quote, at the first line without the >.
 // Returns undefined when the text has no such heading. A line ends at LF or CR LF.
 function docSection(text, heading) {
   const level = heading.match(/^#+/)[0].length;
   let fence = null;
+  let item = null;
   let section;
   for (const line of text.split(/\r?\n/)) {
     if (fence !== null) {
       const close = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/)?.[1];
       if (close?.[0] === fence[0] && close.length >= fence.length) fence = null;
     } else {
-      const open = line.match(/^ {0,3}(`{3,}|~{3,})(.*)/);
+      item = listItem(line, item);
+      const open = item === null ? line.match(/^ {0,3}(`{3,}|~{3,})(.*)/) : null;
       if (open && !(open[1][0] === '`' && open[2].includes('`'))) fence = open[1];
     }
-    // The line that closes a fence starts with ` or ~ after its spaces, so it is not a heading either.
+    // The line that closes a fence starts with ` or ~ after its spaces, so it is not a heading either. Nor
+    // is a line of a list item: it is blank, indented or starts with the item's marker.
     if (fence === null) {
       const marks = line.match(/^(#{1,6}) /)?.[1];
       if (section && marks && marks.length <= level) break;
@@ -2986,6 +3037,64 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.equal(docSection(text, '## Not a heading'), undefined);
     assert.equal(docSection(text, '## Not a heading either'), undefined);
     assert.equal(docSection(text, '## Next'), 'Next text.');
+  });
+
+  // The fence that closes a code block inside a list item is indented two or three spaces, as a fence of the
+  // document can be. Read as one, with the fence that opens the block not read, it opened a block that ran on
+  // past the next heading.
+  test('reads a code block inside a list item as part of the item, so the fence that closes it opens no block', () => {
+    for (const item of [
+      ['- ```bash', '  # A comment, not a heading', '  ```'],
+      ['1. Run the scan:', '', '     ```', '   # A comment, not a heading', '   ```'],
+      ['* ~~~', '\t# A comment, not a heading', '  ~~~'],
+    ]) {
+      const text = ['## Example', ...item, '## Next', 'Next text.'].join('\n');
+      assert.equal(docSection(text, '## Example'), item.join('\n'));
+      assert.equal(docSection(text, '## Next'), 'Next text.');
+    }
+  });
+
+  // Each text has a line, then a fence indented two spaces, a # line and a second such fence. Where the line
+  // starts a list item whose content starts at the third column or before, the first fence is part of the
+  // item, the # line ends the item and is a heading, and the second fence opens a block that holds the rest
+  // of the text. Where it does not, the two fences are a code block of the document that holds the # line.
+  test('reads a list item as CommonMark does: it starts at a marker and holds the lines indented to its content', () => {
+    const read = (first) => {
+      const text = ['## A', first, '  ```', '# B', '  ```', '## C'].join('\n');
+      return [docSection(text, '## A'), docSection(text, '# B'), docSection(text, '## C')];
+    };
+    for (const first of ['- Item', '+ Item', '* Item', '-', '-     Item', '- Item\n']) {
+      assert.deepEqual(read(first), [`${first}\n  \`\`\``, '  ```\n## C', undefined], JSON.stringify(first));
+    }
+    for (const first of ['1. Item', '-  Item', ' - Item', '-\tItem', '    - Item', '-Item', '* * *', '- - -', '-\n', '1234567890. Item']) {
+      assert.deepEqual(read(first), [`${first}\n  \`\`\`\n# B\n  \`\`\``, undefined, ''], JSON.stringify(first));
+    }
+  });
+
+  // A line of a block quote starts with >, so the fences of a code block inside a quote are not fences of the
+  // document, and a # line of the quote is not a heading. CommonMark ends a quote, and a code block inside
+  // it, at the first line without the >, so a # line there is a heading.
+  test('reads a code block inside a block quote as part of the quote, which ends at the first line without the >', () => {
+    const quote = ['> ```', '> # A comment, not a heading', '> ```'];
+    const text = ['## Example', ...quote, '## Next', 'Next text.'].join('\n');
+    assert.equal(docSection(text, '## Example'), quote.join('\n'));
+    assert.equal(docSection(text, '## Next'), 'Next text.');
+    const ended = '## A\n> ```\n# B\n> ```\n## C\nc';
+    assert.equal(docSection(ended, '## A'), '> ```');
+    assert.equal(docSection(ended, '# B'), '> ```\n## C\nc');
+  });
+
+  test('reads a long line of dashes in linear time', () => {
+    // Returns the time taken to read a section whose one line is the given number of dashes, with a space
+    // after each and a word at the end: a list item, not a thematic break.
+    const read = (dashes) => {
+      const line = `${'- '.repeat(dashes)}x`;
+      const start = performance.now();
+      assert.equal(docSection(`## A\n${line}`, '## A'), line);
+      return performance.now() - start;
+    };
+    const ratio = timeRatio(read, 512_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the dashes took ${ratio.toFixed(2)} times as long`);
   });
 
   // A document that tells a reader to sign in one section and says what the record is in another has the
