@@ -2358,6 +2358,20 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     );
   });
 
+  // guard sign writes each file's SHA-256 hash to GUARD_STORE, with no key and no signature value, so anyone
+  // who can edit a soul can also sign it again. The documents call the record a hash and say so where they
+  // tell a reader to sign, rather than call it a cryptographic signature.
+  test('README.md, CONTRIBUTING.md and the guides call what guard sign records a hash, not a cryptographic signature', () => {
+    const texts = docTexts();
+    const claims = texts.flatMap(([file, text]) =>
+      text.split(/\r?\n/).flatMap((line, index) => (/cryptograph/i.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [])),
+    );
+    assert.deepEqual(claims, []);
+    for (const file of ['README.md', 'guides/soul-hardening.md']) {
+      assert.match(texts.find(([name]) => name === file)[1], /The record is a hash, not a keyed signature/, file);
+    }
+  });
+
   test(
     'the guard sign and guard verify commands sign SOUL.md and detect a change to it',
     { skip: OPENA2A_CLI ? false : "set OPENA2A_CLI='npx --yes opena2a-cli@latest' to run it" },

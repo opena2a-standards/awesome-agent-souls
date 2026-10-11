@@ -470,7 +470,7 @@ In-depth guides for working with agent souls beyond copy-and-paste.
 
 ## Soul Integrity
 
-A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could be manipulated into violating its boundaries. Use [ConfigGuard](https://github.com/opena2a-org/opena2a) to cryptographically sign and verify your soul files.
+A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could be manipulated into violating its boundaries. Use [ConfigGuard](https://github.com/opena2a-org/opena2a) to record a SHA-256 hash of your soul files and check them against it.
 
 **Sign your soul file:**
 
@@ -478,7 +478,7 @@ A `SOUL.md` file shapes agent behavior. If it is tampered with, your agent could
 npx --yes opena2a-cli@latest guard sign --files SOUL.md
 ```
 
-This writes `.opena2a/guard/signatures.json`, which records the file's SHA-256 hash and when it was signed. Name each file after `--files`: a file name given without it is read as a directory to search, and nothing is signed.
+This writes `.opena2a/guard/signatures.json`, which records the file's SHA-256 hash and when it was signed. Name each file after `--files`: a file name given without it is read as a directory to search, and nothing is signed. The record is a hash, not a keyed signature: anyone who can edit `SOUL.md` can also run `guard sign --files SOUL.md` again, so review changes to `.opena2a/guard/` as you review changes to `SOUL.md`.
 
 **Verify before each session:**
 
