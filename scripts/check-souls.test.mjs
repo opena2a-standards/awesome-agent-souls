@@ -129,23 +129,79 @@ function standardNames(cell) {
   return names;
 }
 
+// A comma, a semicolon or a period that no word character follows ends a clause of the description of the
+// standards test, so the period in WCAG 2.1 does not. The group keeps each end in the result of a split.
+const CLAUSE_END = /([,;]|\.(?!\w))/;
+
+// The words before a cell in an example of a name the standards test reads.
+const CELL_START = /\bso | and /g;
+
 // Returns the description of the standards test in `guide`, from its sentence on the By Industry table to
 // the next `If you change`, and the examples it gives of the names `standardNames` reads, each as a cell
 // and the names read from it: `<cell> is read whole` and `<cell> is read as <name>` give one name, and
-// `does not check <cell> or <cell>` gives none.
+// `does not check <cell> or <cell>` gives none. An example ends at the end of a clause, and a read example
+// may also end at ` and `. The text is split into clauses and each clause is read once, so the time taken
+// grows with the length of the text, however often a clause repeats the words of an example.
 function standardsExamples(guide) {
   const start = guide.indexOf("If you change a row of the README's By Industry");
   assert.ok(start >= 0, 'CONTRIBUTING.md: the description of the standards test was not found');
   const end = guide.indexOf('If you change', start + 1);
   const text = guide.slice(start, end < 0 ? undefined : end);
-  const name = String.raw`(?:[^,;.]|\.(?=\w))+?`;
-  const examples = [];
-  const read = new RegExp(String.raw`(?:, (?:so )?|\bso | and )(${name}) is read (?:whole|as (${name}))(?=[,;]|\.(?!\w)| and )`, 'g');
-  for (const [, cell, as] of text.matchAll(read)) examples.push([cell, [as ?? cell]]);
-  for (const [, list] of text.matchAll(/does not check (.+?)(?=[,;]|\.(?!\w))/g)) {
-    for (const cell of list.split(' or ')) examples.push([cell, []]);
+  const read = [];
+  const unchecked = [];
+  // Clauses at even indexes, each followed by the end at the next index; the last clause has no end.
+  const parts = text.split(CLAUSE_END);
+  for (let index = 0; index < parts.length; index += 2) {
+    const ended = index + 1 < parts.length;
+    read.push(...readExamples(parts[index], ended, parts[index - 1] === ','));
+    const words = parts[index].indexOf('does not check ');
+    const list = words < 0 ? '' : parts[index].slice(words + 'does not check '.length);
+    if (ended && list) for (const cell of list.split(' or ')) unchecked.push([cell, []]);
   }
-  return { text, examples };
+  return { text, examples: [...read, ...unchecked] };
+}
+
+// Returns a cell and the one name read from it for each `<cell> is read whole` and `<cell> is read as
+// <name>` in a clause, in order. `ended` says whether a comma, semicolon or period ends the clause, and
+// `afterComma` whether a comma comes before it. The clause is split at ` is read `: a cell runs from the
+// first `so ` or ` and ` in the part before, or from the start of the clause after `, ` or `, so `, to the
+// end of that part, and the part after starts with `whole` or `as <name>`, which ends at ` and ` or at
+// the end of the clause when the clause ends. The next cell may start at that ` and `.
+function readExamples(clause, ended, afterComma) {
+  const parts = clause.split(' is read ');
+  const examples = [];
+  // Where a cell may start in the next part: at the ` and ` that ends the example before it, if one does.
+  let from = 0;
+  for (let index = 0; index + 1 < parts.length; index += 1) {
+    const before = parts[index];
+    const after = parts[index + 1];
+    let cellStart = -1;
+    if (index === 0 && afterComma && before.startsWith(' ')) {
+      cellStart = before.startsWith(' so ') ? 4 : 1;
+    } else {
+      CELL_START.lastIndex = from;
+      const words = CELL_START.exec(before);
+      if (words) cellStart = words.index + words[0].length;
+    }
+    from = 0;
+    const cell = cellStart < 0 ? '' : before.slice(cellStart);
+    let exampleEnd = -1;
+    let name = cell;
+    if (after.startsWith('whole')) {
+      exampleEnd = 5;
+    } else if (after.startsWith('as ')) {
+      const and = after.indexOf(' and ', 4);
+      exampleEnd = and < 0 ? after.length : and;
+      name = after.slice(3, exampleEnd);
+    }
+    const ends =
+      exampleEnd === after.length ? index + 2 === parts.length && ended : after.startsWith(' and ', exampleEnd);
+    if (cell && name && exampleEnd >= 0 && ends) {
+      examples.push([cell, [name]]);
+      from = exampleEnd;
+    }
+  }
+  return examples;
 }
 
 // Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
@@ -671,6 +727,43 @@ describe('standardsExamples', () => {
       ['Fair Housing Act', []],
       ['attorney-client privilege', []],
     ]);
+  });
+
+  // Returns the time taken to read the examples in a description of the given number of repeats of `words`,
+  // with no comma, semicolon or period, so no example ends and none is read.
+  const read = (words, repeats) => {
+    const guide = `If you change a row of the README's By Industry table ${words.repeat(repeats)}`;
+    const start = performance.now();
+    assert.deepEqual(standardsExamples(guide).examples, []);
+    return performance.now() - start;
+  };
+
+  // Asserts that a description of `repeats` repeats of `words` is read in under a second, and that four
+  // times the repeats take less than six times as long.
+  const assertLinear = (words, repeats) => {
+    const elapsed = read(words, repeats);
+    assert.ok(elapsed < 1000, `read ${repeats} repeats of '${words}' in ${Math.round(elapsed)} ms`);
+    const fastest = (count) => Math.min(...Array.from({ length: 10 }, () => read(words, count)));
+    const ratio = fastest(repeats) / fastest(repeats / 4);
+    assert.ok(ratio < 6, `four times the repeats of '${words}' took ${ratio.toFixed(2)} times as long`);
+  };
+
+  test('reads a long description that repeats a read example in linear time', () => {
+    // Each `so ` was tried as the start of a cell, each ` is read as ` after it as the end of that cell,
+    // and the rest of the description after each as a name: twice the repeats, eight times as long.
+    assertLinear('so x is read as x ', 1_000);
+  });
+
+  test('reads a long description that repeats and in linear time', () => {
+    // The rest of the description after each ` and ` was tried as a cell: twice the repeats, four times
+    // as long.
+    assertLinear(' and x', 40_000);
+  });
+
+  test('reads a long description that repeats does not check in linear time', () => {
+    // The rest of the description after each `does not check` was tried as a list of cells: twice the
+    // repeats, four times as long.
+    assertLinear('does not check x ', 20_000);
   });
 });
 
