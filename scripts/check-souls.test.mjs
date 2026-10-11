@@ -3417,68 +3417,115 @@ describe('this test file', () => {
     assert.deepEqual(shortCommentLines(readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/)), []);
   });
 
-  // A line that sets a name, as `const`, `let` or an assignment does. The groups hold the name and what the
-  // line sets it to, which runs on to the first line from this one on that ends with a semicolon.
-  const SETS_NAME = /^\s*(?:(?:const|let) )?(\w+) =(?!=)(.*)$/;
+  // A line that sets a name, as `const`, `let` or an assignment does, and not a comparison or an arrow
+  // function, whose parameter comes before `=>`. The groups hold the name and what the line sets it to,
+  // which runs on to the first line from this one on whose code ends with a semicolon.
+  const SETS_NAME = /^\s*(?:(?:const|let) )?(\w+) =(?![=>])(.*)$/;
 
-  // A string, template literal, regular expression or comment, whose text may hold a slash that divides
-  // nothing. A slash starts a regular expression unless it follows a name, a number or a closing bracket,
-  // as a slash that divides does.
+  // A string, template literal, regular expression or comment that starts where the search does, whose text
+  // may hold a slash that divides nothing.
   const LITERAL =
-    /'(?:\\.|[^\\'\n])*'|"(?:\\.|[^\\"\n])*"|`(?:\\.|[^\\`])*`|\/\/.*|\/\*[\s\S]*?\*\/|(?<![\w$)\]]\s*)\/(?:\\.|\[(?:\\.|[^\\\]\n])*\]|[^\\/[\n])+\/[a-z]*/g;
+    /'(?:\\.|[^\\'\n])*'|"(?:\\.|[^\\"\n])*"|`(?:\\.|[^\\`])*`|\/\/.*|\/\*[\s\S]*?\*\/|\/(?:\\.|\[(?:\\.|[^\\\]\n])*\]|[^\\/[\n])+\/[a-z]*/y;
+
+  // Returns the code of `text`, with a space in place of each string, template literal, regular expression
+  // and comment. A slash starts a regular expression unless the code before it ends with a name, a number
+  // or a closing bracket, as a slash that divides does. That code has no comments in it, so a slash that
+  // divides after a comment is read as one.
+  function codeOf(text) {
+    let code = '';
+    for (let at = 0; at < text.length; ) {
+      LITERAL.lastIndex = at;
+      const [literal] = LITERAL.exec(text) ?? [];
+      if (literal === undefined || (/^\/[^/*]/.test(literal) && /[\w$)\]]\s*$/.test(code))) {
+        code += text[at];
+        at += 1;
+      } else {
+        code += ' ';
+        at += literal.length;
+      }
+    }
+    return code;
+  }
 
   // A division by a value that is not a number, with or without spaces around the slash, as a time ratio
   // divides one time by another. Dividing by a number, as `size / 16` does, gives a size or a time.
   const DIVIDES_BY_VALUE = /\/\s*[^\d\s]/;
 
-  // A line that compares a value with a bound, as the first argument of `assert.ok` on that line or on a
-  // line of its own. The groups hold the value, a name or the code that takes it, and the bound.
-  const COMPARES = /^\s*(?:assert\.ok\()?([\w(][^'"`]*?) < ([^,]*),/;
+  // The code of a line that compares two values with `<`, `<=`, `>` or `>=`, as the first argument of
+  // `assert` or `assert.ok` on that line, or on a line of its own that a comma ends. The groups hold the
+  // call, the two sides and what ends the comparison.
+  const COMPARES = /^\s*(assert(?:\.ok)?\()?([\w(].*?) [<>]=? (.*?)\s*(,|\);?\s*$)/;
+
+  // Returns the two sides of the comparison on `line`, or undefined when it has none.
+  function comparison(line) {
+    const [, call, before, after, end] = COMPARES.exec(codeOf(line)) ?? [];
+    return before === undefined || (call === undefined && end !== ',') ? undefined : [before, after];
+  }
+
+  // Returns whether `value` is a call of timeRatio and nothing more, as a time ratio that nothing divides
+  // or changes after timeRatio returns it is.
+  function isTimeRatioCall(value) {
+    let code = codeOf(value).trim();
+    // Each pass leaves out the innermost brackets and what they hold, so that a call leaves only its name.
+    while (/\([^()]*\)/.test(code)) code = code.replace(/\([^()]*\)/g, '');
+    return /^timeRatio\s*;?$/.test(code);
+  }
 
   // Returns why `value`, which a line sets `name` to or compares with a bound, is read as a time ratio, or
   // undefined when it is not. A value is read as one when it calls timeRatio, when it divides by a value
   // that is not a number, whatever the name, or when its name is `ratio`, whatever sets it: this file
-  // divides nothing else that way.
-  function timeRatioReason(name, value = name) {
-    const code = value.replace(LITERAL, ' ');
+  // divides nothing else that way. It is read as one too when it takes a time ratio, a name `ratio` or a
+  // name that a line in `ratios` sets, so that a time ratio divided by a number is still read as one.
+  function timeRatioReason(name, value, ratios) {
+    const code = codeOf(value);
     if (/\btimeRatio\(/.test(code)) return 'a value that calls timeRatio is read as a time ratio';
     if (DIVIDES_BY_VALUE.test(code)) return 'any division by a value is read as a time ratio';
     if (name === 'ratio') return 'a value named ratio is read as a time ratio';
-    return undefined;
+    const taken = code.match(/\w+/g)?.find((word) => word === 'ratio' || ratios.some((set) => set.name === word));
+    return taken === undefined ? undefined : `a value that takes ${taken}, a time ratio, is read as a time ratio`;
   }
 
   // Returns the index of each line in `lines` that sets a name to a time ratio, with the name, what the
-  // line sets it to and why that is read as a time ratio.
+  // line sets it to and why that is read as a time ratio. The time ratios that a value can take are those
+  // that the lines before it set.
   function timeRatioLines(lines) {
-    return lines.flatMap((line, index) => {
+    const ratios = [];
+    lines.forEach((line, index) => {
       const [, name, rest] = SETS_NAME.exec(line) ?? [];
-      if (name === undefined) return [];
-      const end = lines.findIndex((other, at) => at >= index && /;\s*$/.test(other));
+      if (name === undefined) return;
+      const end = lines.findIndex((other, at) => at >= index && /;\s*$/.test(codeOf(other)));
       const value = [rest, ...lines.slice(index + 1, end + 1)].join('\n').trim();
-      const reason = timeRatioReason(name, value);
-      return reason === undefined ? [] : [{ index, name, value, reason }];
+      const reason = timeRatioReason(name, value, ratios);
+      if (reason !== undefined) ratios.push({ index, name, value, reason });
     });
+    return ratios;
   }
 
   // Returns one line for each line in `lines` that sets or takes a time ratio that is not a call of
   // timeRatio, or that compares one with a bound other than LINEAR_TIME_RATIO, with why it is read as a
-  // time ratio. A name compared is read as one for the reason that the last line setting it before the
-  // comparison gives. A linear time test that divides two times of its own, or has a bound of its own, is
-  // reported under any name so that it compares the sizes and the bound that the comment on
-  // LINEAR_TIME_RATIO gives the reasons for.
+  // time ratio. The side of a comparison read as a time ratio is its value and the other side its bound;
+  // when both are read as one, the first side is the value. A name compared is read as one for the reason
+  // that the last line setting it before the comparison gives, or, when every line setting it comes after
+  // the comparison, for the reason that the first of them gives. A linear time test that divides two
+  // times of its own, or has a bound of its own, is reported under any name so that it compares the sizes
+  // and the bound that the comment on LINEAR_TIME_RATIO gives the reasons for.
   function ownTimeRatios(lines) {
     const ratios = timeRatioLines(lines);
+    const reasonAt = (value, index) => {
+      const sets = ratios.filter((set) => set.name === value);
+      return (sets.findLast((set) => set.index < index) ?? sets[0])?.reason ?? timeRatioReason(value, value, ratios);
+    };
     return lines.flatMap((line, index) => {
-      const set = ratios.find((ratio) => ratio.index === index);
-      if (set !== undefined && !set.value.startsWith('timeRatio(')) {
+      const set = ratios.find((other) => other.index === index);
+      if (set !== undefined && !isTimeRatioCall(set.value)) {
         return [`line ${index + 1} sets a time ratio that is not a call of timeRatio; ${set.reason}`];
       }
-      const [, value, bound] = COMPARES.exec(line) ?? [];
-      if (value === undefined) return [];
-      const sets = ratios.filter((ratio) => ratio.name === value);
-      const reason = (sets.findLast((ratio) => ratio.index < index) ?? sets[0])?.reason ?? timeRatioReason(value);
+      const [first, second] = comparison(line) ?? [];
+      if (first === undefined) return [];
+      let [value, bound, reason] = [first, second, reasonAt(first, index)];
+      if (reason === undefined) [value, bound, reason] = [second, first, reasonAt(second, index)];
       if (reason === undefined) return [];
-      if (!/^\w+$/.test(value) && !value.startsWith('timeRatio(')) {
+      if (!/^\w+$/.test(value) && !isTimeRatioCall(value)) {
         return [`line ${index + 1} takes a time ratio that is not a call of timeRatio; ${reason}`];
       }
       if (bound !== 'LINEAR_TIME_RATIO') {
@@ -3584,6 +3631,8 @@ describe('this test file', () => {
       '    const bracket = /[/] only/;',
       '    const split = text.split(/\\r?\\n/); // total / count',
       '    const block = total /* / count */;',
+      "    const apostrophe = 'it\\'s / only hides';",
+      '    const quotation = "a \\" / only hides";',
       "    assert.ok(spaced < 50, 'x');",
       "    assert.ok(pattern < 50, 'x');",
       "    assert.ok(split < 50, 'x');",
@@ -3594,11 +3643,115 @@ describe('this test file', () => {
     ]);
   });
 
+  test('reads a slash after a name, a number or a closing bracket as a division when another slash follows it', () => {
+    const lines = [
+      '    const plain = big / small / 2;',
+      '    const dollar = big$ / small$ / 2;',
+      '    const indexed = times[1] / times[0] / 2;',
+    ];
+    const divides = 'any division by a value is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 1 sets a time ratio that is not a call of timeRatio; ${divides}`,
+      `line 2 sets a time ratio that is not a call of timeRatio; ${divides}`,
+      `line 3 sets a time ratio that is not a call of timeRatio; ${divides}`,
+    ]);
+  });
+
+  test('reads a slash after a comment as a division when the code before the comment ends with a value', () => {
+    const lines = [
+      '    const slower = fastest(repeats) /* larger */ / fastest(repeats / 4);',
+      "    assert.ok(slower < 6, 'x');",
+      "    assert.ok(fastest(repeats) /* larger */ / fastest(repeats / 4) < 6, 'x');",
+      '    const later = fastest(repeats) // the larger.',
+      '/ fastest(repeats / 4);',
+    ];
+    const divides = 'any division by a value is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 1 sets a time ratio that is not a call of timeRatio; ${divides}`,
+      `line 2 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${divides}`,
+      `line 3 takes a time ratio that is not a call of timeRatio; ${divides}`,
+      `line 4 sets a time ratio that is not a call of timeRatio; ${divides}`,
+    ]);
+  });
+
+  test('reports a time ratio divided by a number before it is compared, in the comparison or after an assignment', () => {
+    const lines = [
+      '    const ratio = timeRatio(check, 32_000) / 4;',
+      "    assert.ok(ratio < LINEAR_TIME_RATIO, 'x');",
+      "    assert.ok(timeRatio(check, 32_000) / 4 < LINEAR_TIME_RATIO, 'x');",
+      '    const factor = timeRatio(check, 32_000);',
+      "    assert.ok(factor / 4 < LINEAR_TIME_RATIO, 'x');",
+      '    const quarter = factor / 4;',
+      "    assert.ok(quarter < LINEAR_TIME_RATIO, 'x');",
+    ];
+    const calls = 'a value that calls timeRatio is read as a time ratio';
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 1 sets a time ratio that is not a call of timeRatio; ${calls}`,
+      `line 3 takes a time ratio that is not a call of timeRatio; ${calls}`,
+      `line 5 takes a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 6 sets a time ratio that is not a call of timeRatio; ${takes}`,
+    ]);
+    // A value that takes a name ratio takes a time ratio, whether or not a line sets it.
+    const named = 'a value that takes ratio, a time ratio, is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(['    const quarter = ratio / 4;', "    assert.ok(ratio / 4 < LINEAR_TIME_RATIO, 'x');"]), [
+      `line 1 sets a time ratio that is not a call of timeRatio; ${named}`,
+      `line 2 takes a time ratio that is not a call of timeRatio; ${named}`,
+    ]);
+  });
+
+  test('reads a comparison with <, <=, > or >=, in assert or assert.ok, with or without a message or a comment', () => {
+    const lines = [
+      '    const ratio = timeRatio(check, 32_000);',
+      "    assert.ok(ratio <= 256, 'x');",
+      '    assert.ok(ratio < 256);',
+      "    assert(ratio < 256, 'x');",
+      "    assert.ok(256 > ratio, 'x');",
+      "    assert.ok(256 >= ratio, 'x');",
+      "    assert.ok(ratio < 256 /* not 64 */, 'x');",
+      '    assert.ok(ratio < 256); // not 64',
+      "    assert(LINEAR_TIME_RATIO > ratio, 'x');",
+      '    assert.ok(ratio <= LINEAR_TIME_RATIO);',
+      // A comparison on a line of its own is read only when a comma ends it, as an argument does.
+      '    if (ratio < 256)',
+    ];
+    const calls = 'a value that calls timeRatio is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 2 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 3 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 4 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 5 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 6 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 7 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+      `line 8 compares a time ratio with 256, not LINEAR_TIME_RATIO; ${calls}`,
+    ]);
+  });
+
+  test('reads a value as ending at a semicolon with a comment after it, and reads no comparison or arrow function as setting a name', () => {
+    assert.deepEqual(ownTimeRatios(['    const size = 32_000; // the larger size', '    return fastest(size) / fastest(size / 16);']), []);
+    assert.deepEqual(ownTimeRatios(['      count => total / count,', '      found == total / count;', '      found === total / count;']), []);
+  });
+
+  test('reads a name compared for the last line setting it before the comparison, or the first when every one comes after', () => {
+    const lines = [
+      "    assert.ok(factor < 6, 'x');",
+      '    let factor = fastest(repeats) / fastest(repeats / 4);',
+      '    factor = timeRatio(check, 32_000);',
+      "    assert.ok(factor < 6, 'x');",
+    ];
+    const divides = 'any division by a value is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 1 compares a time ratio with 6, not LINEAR_TIME_RATIO; ${divides}`,
+      `line 2 sets a time ratio that is not a call of timeRatio; ${divides}`,
+      'line 4 compares a time ratio with 6, not LINEAR_TIME_RATIO; a value that calls timeRatio is read as a time ratio',
+    ]);
+  });
+
   test('every time ratio is set with timeRatio and compared with LINEAR_TIME_RATIO', () => {
     const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
     assert.deepEqual(ownTimeRatios(lines), []);
     // With no comparison in the file, the check above would have checked nothing.
     const names = new Set(timeRatioLines(lines).map(({ name }) => name));
-    assert.ok(lines.some((line) => names.has(COMPARES.exec(line)?.[1])), 'no comparison of a time ratio was found');
+    assert.ok(lines.some((line) => comparison(line)?.some((side) => names.has(side))), 'no comparison of a time ratio was found');
   });
 });
