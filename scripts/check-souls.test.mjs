@@ -1624,18 +1624,19 @@ const GUARD_COMMAND = new RegExp(
 // on to opena2a-cli. A subcommand read this way, as in verify<, is neither sign nor verify, so the opt-in
 // run, which runs only a command whose second word is `sign` or `verify`, does not run it, and a test that
 // looks for a guard verify command does not count it. As in the shell, a #
-// starts a comment only at the start of a word, after a space, a tab or a character that ends the command,
-// as in `;#x`, and a # inside a word is part of
-// it, as in SOUL.md#x. A number of one or more digits written just before a redirection, with no space or
-// tab between them, as in 2> or 0<, names the file descriptor it opens and is not a word. This follows
-// bash and POSIX sh, which read 10>out that way too; zsh and dash, the /bin/sh of Debian and Ubuntu, read
-// only a single digit that way, and read the 10 in 10>out as a word. A SENTENCE_PERIOD at the end of a
-// word also ends the command, as in `Run npx --yes opena2a-cli@latest guard verify.`, so the opt-in run
-// passes `verify`, not `verify.`, to opena2a-cli. A period after a space, a tab or another period starts
-// or continues a word, as in `--files .` or `verify...`, and is kept. Its words are separated by spaces
-// and tabs only, as the shell separates them, so the opt-in run passes `--files`, a no-break space and
-// `SOUL.md` to opena2a-cli as one word, as a shell would. Quotes are not read: `--files "a b.md"` is read
-// as the words `"a` and `b.md"`, so a test checks that no command in the docs quotes a word.
+// starts a comment only at the start of a word, after a space, a tab or an operator that ends the
+// command, as in `;#x`, and a # inside a word is part of it, as in SOUL.md#x. A backtick is not such an
+// operator: it ends the command because it closes a Markdown code span. A number of one or more digits
+// written just before a redirection, with no space or tab between them, as in 2> or 0<, names the file
+// descriptor it opens and is not a word. This follows bash and POSIX sh, which read 10>out that way too;
+// zsh and dash, the /bin/sh of Debian and Ubuntu, read only a single digit that way, and read the 10 in
+// 10>out as a word. A SENTENCE_PERIOD at the end of a word also ends the command, as in
+// `Run npx --yes opena2a-cli@latest guard verify.`, so the opt-in run passes `verify`, not `verify.`, to
+// opena2a-cli. A period after a space, a tab or another period starts or continues a word, as in
+// `--files .` or `verify...`, and is kept. Its words are separated by spaces and tabs only, as the shell
+// separates them, so the opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as
+// one word, as a shell would. Quotes are not read: `--files "a b.md"` is read as the words `"a` and
+// `b.md"`, so a test checks that no command in the docs quotes a word.
 function guardCommands(texts) {
   const commands = new Map();
   for (const [, text] of texts) {
@@ -1957,7 +1958,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
-  test('ends a guard command at a # that follows a character that ends the command', () => {
+  test('ends a guard command at a # that follows an operator that ends the command', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign --files a.md;#x',
       'npx --yes opena2a-cli@latest guard sign --files b.md|#x',
@@ -2244,5 +2245,28 @@ describe('this test file', () => {
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
+  });
+
+  test('a comment line that ends inside a sentence is at least half as wide as the widest line of its comment', () => {
+    // A comment is a run of // lines with the same indentation, and a line ends inside a sentence when the
+    // next line of its comment starts with a lowercase letter. A line left short there, as an edit that adds
+    // words to a paragraph can leave one, is reported so that the paragraph is wrapped again.
+    const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
+    const comments = [];
+    let previous;
+    lines.forEach((line, index) => {
+      const indent = /^([ \t]*)\/\/ /.exec(line)?.[1];
+      if (indent !== undefined && indent === previous) comments.at(-1).push(index);
+      else if (indent !== undefined) comments.push([index]);
+      previous = indent;
+    });
+    const short = comments.flatMap((comment) => {
+      const widest = Math.max(...comment.map((index) => lines[index].length));
+      return comment
+        .slice(0, -1)
+        .filter((index) => /^[ \t]*\/\/ [a-z]/.test(lines[index + 1]) && lines[index].length * 2 < widest)
+        .map((index) => `line ${index + 1} is ${lines[index].length} columns wide; its comment's widest is ${widest}`);
+    });
+    assert.deepEqual(short, []);
   });
 });
