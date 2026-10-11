@@ -2231,6 +2231,53 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
   );
 });
 
+// OpenClaw reads an agent's SOUL.md from the agent's workspace, which docs.openclaw.ai places at
+// ~/.openclaw/workspace for the default agent and at ~/.openclaw/workspace-<name> for an agent added by
+// name. A path ends at a space, a quote, a backtick, a parenthesis or |, and a period, comma, colon or
+// semicolon at its end belongs to the sentence. Returns `<file>:<line>: <path>` for each path under
+// ~/.openclaw whose first directory starts with `workspace` and is neither of those, such as
+// ~/.openclaw/workspaces/default, which OpenClaw does not read. A line ends at LF or CR LF.
+function openclawWorkspaceProblems(file, text) {
+  return text.split(/\r?\n/).flatMap((line, index) =>
+    [...line.matchAll(/~\/\.openclaw\/[^\s`'"()|]*/g)]
+      .map(([path]) => path.replace(/[.,:;]+$/, ''))
+      .filter((path) => /^~\/\.openclaw\/workspace/.test(path))
+      .filter((path) => !/^~\/\.openclaw\/workspace(?:-[^/]+)?(?:\/|$)/.test(path))
+      .map((path) => `${file}:${index + 1}: ${path}`),
+  );
+}
+
+describe('OpenClaw workspace paths in README.md, CONTRIBUTING.md and the guides', () => {
+  test('a path names the default workspace or a workspace-<name> directory', () => {
+    const text = [
+      'Natively reads `~/.openclaw/workspace/SOUL.md` or `~/.openclaw/workspace-<name>/SOUL.md`.',
+      'cp souls/a.md ~/.openclaw/workspace/SOUL.md',
+      'cp souls/a.md ~/.openclaw/workspace-support-bot/SOUL.md',
+      'Settings live in `~/.openclaw/openclaw.json`.',
+      'The default workspace is ~/.openclaw/workspace.',
+      'cp souls/a.md ~/.openclaw/workspaces/default/SOUL.md',
+      'Reads `~/.openclaw/workspaces/<name>/SOUL.md` (copy directly)',
+      'cp souls/a.md ~/.openclaw/workspace-/SOUL.md\r',
+      'cp souls/a.md "~/.openclaw/workspace_main/SOUL.md"',
+    ].join('\n');
+    assert.deepEqual(openclawWorkspaceProblems('a.md', text), [
+      'a.md:6: ~/.openclaw/workspaces/default/SOUL.md',
+      'a.md:7: ~/.openclaw/workspaces/<name>/SOUL.md',
+      'a.md:8: ~/.openclaw/workspace-/SOUL.md',
+      'a.md:9: ~/.openclaw/workspace_main/SOUL.md',
+    ]);
+  });
+
+  test('every OpenClaw workspace path is one OpenClaw reads', () => {
+    const texts = docTexts();
+    assert.deepEqual(texts.flatMap(([file, text]) => openclawWorkspaceProblems(file, text)), []);
+    assert.ok(
+      texts.some(([, text]) => text.includes('~/.openclaw/workspace/SOUL.md')),
+      'no file names the default OpenClaw workspace',
+    );
+  });
+});
+
 describe('guardProblems', () => {
   let dir;
   before(() => {
