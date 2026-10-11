@@ -3429,10 +3429,10 @@ describe('this test file', () => {
   // which a colon follows.
   const PATTERN_NAME = /(?<![\w$])[A-Za-z_$][\w$]*(?![\w$])(?=\s*(?:[,\]}=]|$))/g;
 
-  // A string, template literal, regular expression or comment that starts where the search does, whose text
-  // may hold a slash that divides nothing.
+  // A string, template literal, regular expression or line comment that starts where the search does, whose
+  // text may hold a slash that divides nothing.
   const LITERAL =
-    /'(?:\\.|[^\\'\n])*'|"(?:\\.|[^\\"\n])*"|`(?:\\.|[^\\`])*`|\/\/.*|\/\*[\s\S]*?\*\/|\/(?:\\.|\[(?:\\.|[^\\\]\n])*\]|[^\\/[\n])+\/[a-z]*/y;
+    /'(?:\\.|[^\\'\n])*'|"(?:\\.|[^\\"\n])*"|`(?:\\.|[^\\`])*`|\/\/.*|\/(?:\\.|\[(?:\\.|[^\\\]\n])*\]|[^\\/[\n])+\/[a-z]*/y;
 
   // Returns the code of `text`, with a space in place of each character of each string, template literal,
   // regular expression and comment other than a line break, so that each line of the code is the line of
@@ -3443,9 +3443,13 @@ describe('this test file', () => {
     let code = '';
     // The last character of the code so far that is not a space, which is all that a slash needs.
     let last = '';
+    // The place of the last `*/` in the text. A `/*` starts a block comment, which runs to the first `*/`
+    // after it, only when one lies ahead, so the text after the last is not searched once for each `/*`.
+    const lastEnd = text.lastIndexOf('*/');
     for (let at = 0; at < text.length; ) {
+      const comment = text.startsWith('/*', at) && at + 2 <= lastEnd;
       LITERAL.lastIndex = at;
-      const [literal] = LITERAL.exec(text) ?? [];
+      const [literal] = comment ? [text.slice(at, text.indexOf('*/', at + 2) + 2)] : (LITERAL.exec(text) ?? []);
       if (literal === undefined || (/^\/[^/*]/.test(literal) && /[\w$)\]]/.test(last))) {
         code += text[at];
         if (/\S/.test(text[at])) last = text[at];
@@ -3576,11 +3580,10 @@ describe('this test file', () => {
         if (/^[)\]}]$/.test(token) && frames.length > 1) opens[index] = frames.pop().open;
       }
     });
-    // How many parameter lists start at each token less how many end before it, and the names of the
-    // parameters that each body starts and stops setting at each token.
+    // The first and last token of each parameter list with the `=>` after it, and how many parameter lists
+    // start at each token less how many end before it.
     const lists = new Array(tokens.length + 1).fill(0);
-    const starts = [];
-    const stops = [];
+    const arrows = [];
     tokens.forEach((token, index) => {
       if (token !== '=>') return;
       const last = index - 1;
@@ -3588,19 +3591,31 @@ describe('this test file', () => {
       if (first === undefined) return;
       lists[first] += 1;
       lists[last + 1] -= 1;
+      arrows.push({ index, first, last });
+    });
+    // How many parameter lists each token lies in.
+    const inLists = [];
+    lists.forEach((count, index) => {
+      inLists[index] = (inLists[index - 1] ?? 0) + count;
+    });
+    // The names of the parameters that each body starts and stops setting at each token. An arrow function
+    // in a parameter list has its body in that list too, where no name is taken whatever its parameters
+    // are, so its list is not read, and each token is read as a parameter once at most.
+    const starts = [];
+    const stops = [];
+    for (const { index, first, last } of arrows) {
+      if (inLists[index] > 0) continue;
       const end = ends[index] ?? tokens.length;
       for (const name of tokens.slice(first, last + 1).filter((word) => /^\w/.test(word))) {
         (starts[index] ??= []).push(name);
         (stops[end] ??= []).push(name);
       }
-    });
+    }
     const parameters = new Map();
-    let inLists = 0;
     return tokens.filter((token, index) => {
       for (const name of stops[index] ?? []) parameters.set(name, parameters.get(name) - 1);
       for (const name of starts[index] ?? []) parameters.set(name, (parameters.get(name) ?? 0) + 1);
-      inLists += lists[index];
-      return /^\w/.test(token) && inLists === 0 && !(parameters.get(token) > 0);
+      return /^\w/.test(token) && inLists[index] === 0 && !(parameters.get(token) > 0);
     });
   }
 
@@ -3639,7 +3654,7 @@ describe('this test file', () => {
       const joined = [rest, ...codes.slice(index + 1, ends[index] + 1)].join('\n');
       const value = sign === undefined ? joined : `${target} ${sign} ${joined}`;
       const destructures = /^[[{]/.test(target);
-      if (!destructures && sign === undefined && calls.has(/^\s*(\w+)\s*;?\s*$/.exec(value)?.[1])) calls.add(target);
+      if (!destructures && sign === undefined && calls.has(/^\s*(\w+)\s*(?:;\s*)?$/.exec(value)?.[1])) calls.add(target);
       const found = (destructures ? (target.match(PATTERN_NAME) ?? []) : [target])
         .map((name) => ({ index, name, value, reason: timeRatioReason(name, value, names, calls) }))
         .filter(({ reason }) => reason !== undefined);
@@ -4082,6 +4097,11 @@ describe('this test file', () => {
     ]);
   });
 
+  test('reads a block comment up to the first `*/` after its `/*`, and a `/*` that none follows as code', () => {
+    assert.equal(codeOf('a /* b */ c /* d'), 'a         c /* d');
+    assert.equal(codeOf('/*/ a */ b'), '         b');
+  });
+
   test('reads the code of a long line of divisions in linear time', () => {
     // Returns the time taken to read the code of a line of the given number of characters of `a/b/`. Testing
     // all the code read so far at each slash took time that grew with the square of the length.
@@ -4122,6 +4142,48 @@ describe('this test file', () => {
     };
     const ratio = timeRatio(check, 32_000);
     assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the functions took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('checks a name set to a word that a long run of spaces follows in linear time', () => {
+    // Returns the time taken to check a line that sets a name to a word, the given number of spaces and a
+    // sum. Reading the spaces before and after a semicolon that the line may hold there as two runs took
+    // time that grew with the square of the number of spaces.
+    const check = (count) => {
+      const lines = [`    const z = word${' '.repeat(count)}+ 1;`];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const ratio = timeRatio(check, 32_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the spaces took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('checks arrow functions whose parameter lists lie one inside another in linear time', () => {
+    // Returns the time taken to check a value of the given number of arrow functions, each the default
+    // value of the parameter of the one around it. Reading each parameter list again for every list around
+    // it took time that grew with the square of the number of functions.
+    const check = (count) => {
+      const lines = [`    const f = ${'(a = '.repeat(count)}1${') => 1'.repeat(count)};`];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const ratio = timeRatio(check, 4_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the functions took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('checks many lines that each start a block comment that nothing ends in linear time', () => {
+    // Returns the time taken to check the given number of lines, each with a `/*` that no `*/` follows.
+    // Searching to the end of the file for the end of each comment took time that grew with the square of
+    // the number of lines.
+    const check = (count) => {
+      const lines = Array.from({ length: count }, () => 'x /* y');
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const ratio = timeRatio(check, 8_000);
+    assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the lines took ${ratio.toFixed(2)} times as long`);
   });
 
   test('every time ratio is set with timeRatio and compared with LINEAR_TIME_RATIO', () => {
