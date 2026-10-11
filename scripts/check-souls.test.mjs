@@ -267,6 +267,88 @@ describe('notAGitClone', { skip: !GIT_RUNS && 'git did not run' }, () => {
 
 const NOT_A_CLONE = notAGitClone(repoRoot);
 
+// CONTRIBUTING.md says accepted pull requests are squash-merged into `main`. Returns the ref that holds
+// the history of `main` in the clone at `dir`: origin/main where there is one, since a local main can be
+// behind it and the branch that is checked out can carry a merge of its own, or else main. Returns
+// undefined when the clone has neither, as after a clone of one other branch.
+function mainRef(dir) {
+  return ['refs/remotes/origin/main', 'refs/heads/main'].find(
+    (ref) => spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: dir }).status === 0,
+  );
+}
+
+// Returns the merge commits in the history of `revision`, newest first, each as its hash, a space and
+// its subject.
+function mergeCommits(dir, revision) {
+  const { status, stdout, stderr } = spawnSync('git', ['log', '--merges', '--format=%H %s', revision, '--'], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  assert.equal(status, 0, `git log failed: ${stderr}`);
+  return stdout.split('\n').filter(Boolean);
+}
+
+// Returns the merge commits that `guide` does not name. The guide names a commit by writing the first
+// seven or more characters of its hash in inline code.
+function unnamedMergeCommits(guide, commits) {
+  const named = [...guide.matchAll(/`([0-9a-f]{7,40})`/g)].map((match) => match[1]);
+  return commits.filter((commit) => !named.some((hash) => commit.startsWith(hash)));
+}
+
+describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && 'git did not run' }, () => {
+  let repo;
+  let git;
+  let merge;
+  let squashed;
+  before(() => {
+    repo = mkdtempSync(join(tmpdir(), 'check-souls-history-'));
+    git = (...args) => {
+      const identity = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com'];
+      const { status, stdout, stderr } = spawnSync('git', [...identity, ...args], {
+        cwd: repo,
+        encoding: 'utf8',
+        input: '',
+      });
+      assert.equal(status, 0, `git ${args[0]} failed: ${stderr}`);
+      return stdout.trim();
+    };
+    git('init', '--quiet');
+    // Every commit has the empty tree, so the history is built without a work tree or an index.
+    const tree = git('mktree');
+    const commit = (subject, ...parents) =>
+      git('commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', subject);
+    const base = commit('Base');
+    merge = commit('Merge side', commit('Other', base), commit('Side', base));
+    squashed = commit('Change (#1)', merge);
+    git('update-ref', 'refs/heads/main', merge);
+    git('update-ref', 'refs/remotes/origin/main', squashed);
+  });
+  after(() => rmSync(repo, { recursive: true, force: true }));
+
+  test('mergeCommits lists a commit with two parents and no commit with one', () => {
+    assert.deepEqual(mergeCommits(repo, squashed), [`${merge} Merge side`]);
+  });
+
+  test('unnamedMergeCommits accepts the start of a hash in inline code, and no shorter or unquoted one', () => {
+    const commits = [`${merge} Merge side`];
+    assert.deepEqual(unnamedMergeCommits(`The merge commit \`${merge.slice(0, 7)}\` is older.`, commits), []);
+    assert.deepEqual(unnamedMergeCommits(`The merge commit \`${merge}\` is older.`, commits), []);
+    assert.deepEqual(unnamedMergeCommits(`The merge commit \`${merge.slice(0, 6)}\` is older.`, commits), commits);
+    assert.deepEqual(unnamedMergeCommits(`The merge commit ${merge.slice(0, 7)} is older.`, commits), commits);
+    assert.deepEqual(unnamedMergeCommits(`The commit \`${squashed.slice(0, 7)}\` is newer.`, commits), commits);
+  });
+
+  test('mainRef names origin/main where the clone has one, then main, then nothing', () => {
+    assert.equal(mainRef(repo), 'refs/remotes/origin/main');
+    git('update-ref', '-d', 'refs/remotes/origin/main');
+    assert.equal(mainRef(repo), 'refs/heads/main');
+    git('update-ref', '-d', 'refs/heads/main');
+    assert.equal(mainRef(repo), undefined);
+  });
+});
+
+const MAIN_REF = NOT_A_CLONE ? undefined : mainRef(repoRoot);
+
 describe('this repository', () => {
   test('every soul and template meets the CONTRIBUTING.md requirements table', () => {
     const { problems, fileCount, ruleCount } = checkRepository(repoRoot);
@@ -303,6 +385,20 @@ describe('this repository', () => {
         : 'the repository has no CI workflow: CONTRIBUTING.md must say so',
     );
   });
+
+  test(
+    'CONTRIBUTING.md, which says pull requests are squash-merged, names every merge commit on main',
+    {
+      skip:
+        !MAIN_REF &&
+        `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no origin/main or main branch'}`,
+    },
+    () => {
+      const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
+      assert.match(guide, /squash-merged/);
+      assert.deepEqual(unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)), []);
+    },
+  );
 
   test('every template contains the role-play, jailbreak and act as refusal keywords', () => {
     for (const [file, text] of templateSouls()) {

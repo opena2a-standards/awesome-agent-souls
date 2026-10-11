@@ -164,7 +164,7 @@ A maintainer reads each pull request and decides whether it is merged. No automa
 
 ### Merge
 
-Accepted pull requests are squash-merged into `main`, so each one lands as a single commit.
+Accepted pull requests are squash-merged into `main`, so each one lands as a single commit. The one merge commit in the history, `4c386ac`, is from 2026-03-04, the day before the first pull request was merged.
 
 ---
 
