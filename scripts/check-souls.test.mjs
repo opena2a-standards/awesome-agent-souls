@@ -308,12 +308,17 @@ describe('notAGitClone', { skip: !GIT_RUNS && 'git did not run' }, () => {
 
 const NOT_A_CLONE = notAGitClone(repoRoot);
 
+// The main of the remote named upstream, the usual name in a clone of a fork for the repository the fork
+// was made from.
+const UPSTREAM_MAIN = 'refs/remotes/upstream/main';
+
 // CONTRIBUTING.md says accepted pull requests are squash-merged into `main`. Returns the ref that holds
-// the history of `main` in the clone at `dir`: origin/main where there is one, since a local main can be
-// behind it and the branch that is checked out can carry a merge of its own, or else main. Returns
-// undefined when the clone has neither, as after a clone of one other branch.
+// the history of `main` in the clone at `dir`: upstream/main where there is one, since in a clone of a
+// fork origin is the fork, whose main can carry a merge of its own; or else origin/main, since a local
+// main can be behind it and the branch that is checked out can carry a merge of its own; or else main.
+// Returns undefined when the clone has none of the three, as after a clone of one other branch.
 function mainRef(dir) {
-  return ['refs/remotes/origin/main', 'refs/heads/main'].find(
+  return [UPSTREAM_MAIN, 'refs/remotes/origin/main', 'refs/heads/main'].find(
     (ref) => spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: dir }).status === 0,
   );
 }
@@ -341,6 +346,7 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
   let git;
   let merge;
   let squashed;
+  let forkMerge;
   before(() => {
     repo = mkdtempSync(join(tmpdir(), 'check-souls-history-'));
     git = (...args) => {
@@ -361,8 +367,12 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
     const base = commit('Base');
     merge = commit('Merge side', commit('Other', base), commit('Side', base));
     squashed = commit('Change (#1)', merge);
+    // The clone of a fork: the fork's main has a change of its own and then a merge of the newer
+    // upstream main, and the repository it was forked from is the remote named upstream.
+    forkMerge = commit('Merge upstream', commit('Fork change', merge), squashed);
     git('update-ref', 'refs/heads/main', merge);
-    git('update-ref', 'refs/remotes/origin/main', squashed);
+    git('update-ref', 'refs/remotes/origin/main', forkMerge);
+    git('update-ref', UPSTREAM_MAIN, squashed);
   });
   after(() => rmSync(repo, { recursive: true, force: true }));
 
@@ -379,7 +389,17 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
     assert.deepEqual(unnamedMergeCommits(`The commit \`${squashed.slice(0, 7)}\` is newer.`, commits), commits);
   });
 
-  test('mainRef names origin/main where the clone has one, then main, then nothing', () => {
+  test("mainRef names a history without the merge commit that only a fork's own main carries", () => {
+    assert.deepEqual(mergeCommits(repo, 'refs/remotes/origin/main'), [
+      `${forkMerge} Merge upstream`,
+      `${merge} Merge side`,
+    ]);
+    assert.deepEqual(mergeCommits(repo, mainRef(repo)), [`${merge} Merge side`]);
+  });
+
+  test('mainRef names upstream/main where the clone has one, then origin/main, then main, then nothing', () => {
+    assert.equal(mainRef(repo), UPSTREAM_MAIN);
+    git('update-ref', '-d', UPSTREAM_MAIN);
     assert.equal(mainRef(repo), 'refs/remotes/origin/main');
     git('update-ref', '-d', 'refs/remotes/origin/main');
     assert.equal(mainRef(repo), 'refs/heads/main');
@@ -389,6 +409,13 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
 });
 
 const MAIN_REF = NOT_A_CLONE ? undefined : mainRef(repoRoot);
+// Nothing in a clone of a fork with no upstream remote tells it from a clone of the repository the fork
+// was made from, so a merge commit of the fork's own fails the test there, and the failure says what to do.
+const FORK_HINT =
+  MAIN_REF === UPSTREAM_MAIN
+    ? ''
+    : ". In a clone of a fork this is the fork's own history: add the repository it was forked from as " +
+      'a remote named upstream and fetch it, and this test reads upstream/main';
 
 describe('this repository', () => {
   test('every soul and template meets the CONTRIBUTING.md requirements table', () => {
@@ -444,12 +471,16 @@ describe('this repository', () => {
     {
       skip:
         !MAIN_REF &&
-        `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no origin/main or main branch'}`,
+        `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no upstream/main, origin/main or main branch'}`,
     },
     () => {
       const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
       assert.match(guide, /squash-merged/);
-      assert.deepEqual(unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)), []);
+      assert.deepEqual(
+        unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)),
+        [],
+        `CONTRIBUTING.md does not name a merge commit in the history of ${MAIN_REF}${FORK_HINT}`,
+      );
     },
   );
 
