@@ -2355,18 +2355,25 @@ const HASH_NOTE_SECTIONS = [
 // Returns the text under the heading line `heading` in a markdown `text`: the lines after the first such
 // line, up to the next heading of the same or a higher level or to the end of the text, so a section keeps
 // its subsections. `heading` is the whole line, with its # marks. A line inside a fenced code block is not
-// a heading, so a # comment in a shell example neither starts nor ends a section. Returns undefined when
-// the text has no such heading. A line ends at LF or CR LF.
+// a heading, so a # comment in a shell example neither starts nor ends a section. Fences are read as in
+// CommonMark: a fence opens on three or more backticks or tildes indented at most three spaces, where a
+// backtick fence's info string has no backtick, and closes on a line of the same character, at least as
+// long, with nothing after it but spaces or tabs. A line indented four or more spaces opens no fence.
+// Returns undefined when the text has no such heading. A line ends at LF or CR LF.
 function docSection(text, heading) {
   const level = heading.match(/^#+/)[0].length;
   let fence = null;
   let section;
   for (const line of text.split(/\r?\n/)) {
-    const marker = line.match(/^\s*(```|~~~)/);
-    if (marker) {
-      if (fence === null) fence = marker[1];
-      else if (fence === marker[1]) fence = null;
-    } else if (fence === null) {
+    if (fence !== null) {
+      const close = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/)?.[1];
+      if (close?.[0] === fence[0] && close.length >= fence.length) fence = null;
+    } else {
+      const open = line.match(/^ {0,3}(`{3,}|~{3,})(.*)/);
+      if (open && !(open[1][0] === '`' && open[2].includes('`'))) fence = open[1];
+    }
+    // The line that closes a fence starts with ` or ~ after its spaces, so it is not a heading either.
+    if (fence === null) {
       const marks = line.match(/^(#{1,6}) /)?.[1];
       if (section && marks && marks.length <= level) break;
       if (!section && line.trimEnd() === heading) {
@@ -2944,6 +2951,41 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       docSection(text, '## Signing'),
       '```bash\n# Sign after review and approval\nnpx --yes opena2a-cli@latest guard sign --files SOUL.md\n```\nThe record is a hash.',
     );
+  });
+
+  // A shorter fence or a fence of the other character inside a block does not close it, so a # line further
+  // in is not a heading. A line indented four or more spaces is an indented code block, not a fence, so the
+  // next heading still ends the section and the hash sentence under it is not read as part of it.
+  test('reads a code fence as CommonMark does: a block closes only on a fence of the same character at least as long, and an indented line opens none', () => {
+    const indented = docSection(
+      '## Soul Integrity\nSign it.\n    ```\n## Other\nThe record is a hash, not a keyed signature.',
+      '## Soul Integrity',
+    );
+    assert.equal(indented, 'Sign it.\n    ```');
+    assert.doesNotMatch(indented, HASH_NOTE);
+    const lines = [
+      '## Example',
+      '````markdown',
+      '```bash',
+      '# A comment, not a heading',
+      '```',
+      '~~~',
+      '## Not a heading',
+      '````js',
+      '`````',
+      'After the block.',
+      '   ~~~',
+      '## Not a heading either',
+      '~~~~ ',
+      '```not a fence`',
+      '## Next',
+      'Next text.',
+    ];
+    const text = lines.join('\n');
+    assert.equal(docSection(text, '## Example'), lines.slice(1, 14).join('\n'));
+    assert.equal(docSection(text, '## Not a heading'), undefined);
+    assert.equal(docSection(text, '## Not a heading either'), undefined);
+    assert.equal(docSection(text, '## Next'), 'Next text.');
   });
 
   // A document that tells a reader to sign in one section and says what the record is in another has the
