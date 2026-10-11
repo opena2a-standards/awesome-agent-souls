@@ -129,6 +129,25 @@ function standardNames(cell) {
   return names;
 }
 
+// Returns the description of the standards test in `guide`, from its sentence on the By Industry table to
+// the next `If you change`, and the examples it gives of the names `standardNames` reads, each as a cell
+// and the names read from it: `<cell> is read whole` and `<cell> is read as <name>` give one name, and
+// `does not check <cell> or <cell>` gives none.
+function standardsExamples(guide) {
+  const start = guide.indexOf("If you change a row of the README's By Industry");
+  assert.ok(start >= 0, 'CONTRIBUTING.md: the description of the standards test was not found');
+  const end = guide.indexOf('If you change', start + 1);
+  const text = guide.slice(start, end < 0 ? undefined : end);
+  const name = String.raw`(?:[^,;.]|\.(?=\w))+?`;
+  const examples = [];
+  const read = new RegExp(String.raw`(?:, (?:so )?|\bso | and )(${name}) is read (?:whole|as (${name}))(?=[,;]|\.(?!\w)| and )`, 'g');
+  for (const [, cell, as] of text.matchAll(read)) examples.push([cell, [as ?? cell]]);
+  for (const [, list] of text.matchAll(/does not check (.+?)(?=[,;]|\.(?!\w))/g)) {
+    for (const cell of list.split(' or ')) examples.push([cell, []]);
+  }
+  return { text, examples };
+}
+
 // Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
 // one problem for each name `standardNames` reads from it that the soul the row links to does not
 // mention, and the number of names read. The soul may break a name of several words across lines.
@@ -289,12 +308,17 @@ describe('notAGitClone', { skip: !GIT_RUNS && 'git did not run' }, () => {
 
 const NOT_A_CLONE = notAGitClone(repoRoot);
 
+// The main of the remote named upstream, the usual name in a clone of a fork for the repository the fork
+// was made from.
+const UPSTREAM_MAIN = 'refs/remotes/upstream/main';
+
 // CONTRIBUTING.md says accepted pull requests are squash-merged into `main`. Returns the ref that holds
-// the history of `main` in the clone at `dir`: origin/main where there is one, since a local main can be
-// behind it and the branch that is checked out can carry a merge of its own, or else main. Returns
-// undefined when the clone has neither, as after a clone of one other branch.
+// the history of `main` in the clone at `dir`: upstream/main where there is one, since in a clone of a
+// fork origin is the fork, whose main can carry a merge of its own; or else origin/main, since a local
+// main can be behind it and the branch that is checked out can carry a merge of its own; or else main.
+// Returns undefined when the clone has none of the three, as after a clone of one other branch.
 function mainRef(dir) {
-  return ['refs/remotes/origin/main', 'refs/heads/main'].find(
+  return [UPSTREAM_MAIN, 'refs/remotes/origin/main', 'refs/heads/main'].find(
     (ref) => spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: dir }).status === 0,
   );
 }
@@ -322,6 +346,7 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
   let git;
   let merge;
   let squashed;
+  let forkMerge;
   before(() => {
     repo = mkdtempSync(join(tmpdir(), 'check-souls-history-'));
     git = (...args) => {
@@ -342,8 +367,12 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
     const base = commit('Base');
     merge = commit('Merge side', commit('Other', base), commit('Side', base));
     squashed = commit('Change (#1)', merge);
+    // The clone of a fork: the fork's main has a change of its own and then a merge of the newer
+    // upstream main, and the repository it was forked from is the remote named upstream.
+    forkMerge = commit('Merge upstream', commit('Fork change', merge), squashed);
     git('update-ref', 'refs/heads/main', merge);
-    git('update-ref', 'refs/remotes/origin/main', squashed);
+    git('update-ref', 'refs/remotes/origin/main', forkMerge);
+    git('update-ref', UPSTREAM_MAIN, squashed);
   });
   after(() => rmSync(repo, { recursive: true, force: true }));
 
@@ -360,7 +389,17 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
     assert.deepEqual(unnamedMergeCommits(`The commit \`${squashed.slice(0, 7)}\` is newer.`, commits), commits);
   });
 
-  test('mainRef names origin/main where the clone has one, then main, then nothing', () => {
+  test("mainRef names a history without the merge commit that only a fork's own main carries", () => {
+    assert.deepEqual(mergeCommits(repo, 'refs/remotes/origin/main'), [
+      `${forkMerge} Merge upstream`,
+      `${merge} Merge side`,
+    ]);
+    assert.deepEqual(mergeCommits(repo, mainRef(repo)), [`${merge} Merge side`]);
+  });
+
+  test('mainRef names upstream/main where the clone has one, then origin/main, then main, then nothing', () => {
+    assert.equal(mainRef(repo), UPSTREAM_MAIN);
+    git('update-ref', '-d', UPSTREAM_MAIN);
     assert.equal(mainRef(repo), 'refs/remotes/origin/main');
     git('update-ref', '-d', 'refs/remotes/origin/main');
     assert.equal(mainRef(repo), 'refs/heads/main');
@@ -370,6 +409,13 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
 });
 
 const MAIN_REF = NOT_A_CLONE ? undefined : mainRef(repoRoot);
+// Nothing in a clone of a fork with no upstream remote tells it from a clone of the repository the fork
+// was made from, so a merge commit of the fork's own fails the test there, and the failure says what to do.
+const FORK_HINT =
+  MAIN_REF === UPSTREAM_MAIN
+    ? ''
+    : ". In a clone of a fork this is the fork's own history: add the repository it was forked from as " +
+      'a remote named upstream and fetch it, and this test reads upstream/main';
 
 describe('this repository', () => {
   test('every soul and template meets the CONTRIBUTING.md requirements table', () => {
@@ -396,6 +442,18 @@ describe('this repository', () => {
     assert.ok(names > 0, 'no standard or regulation names were read from the README.md tables');
   });
 
+  test('CONTRIBUTING.md says the standards test checks only the names it reads, and how it reads them', () => {
+    const { text, examples } = standardsExamples(readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8'));
+    assert.match(text, /names each standard it reads from the row's last column/);
+    assert.ok(
+      examples.some(([, names]) => names.length === 0),
+      'CONTRIBUTING.md must name a standard the standards test does not read',
+    );
+    for (const [cell, names] of examples) {
+      assert.deepEqual(standardNames(cell), names, `CONTRIBUTING.md says how ${cell} is read`);
+    }
+  });
+
   test('CONTRIBUTING.md says whether pull requests run CI, matching the repository', () => {
     const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
     const hasWorkflows = existsSync(join(repoRoot, '.github', 'workflows'));
@@ -413,12 +471,16 @@ describe('this repository', () => {
     {
       skip:
         !MAIN_REF &&
-        `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no origin/main or main branch'}`,
+        `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no upstream/main, origin/main or main branch'}`,
     },
     () => {
       const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
       assert.match(guide, /squash-merged/);
-      assert.deepEqual(unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)), []);
+      assert.deepEqual(
+        unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)),
+        [],
+        `CONTRIBUTING.md does not name a merge commit in the history of ${MAIN_REF}${FORK_HINT}`,
+      );
     },
   );
 
@@ -546,6 +608,22 @@ describe('unmentionedStandards', () => {
     };
     assert.deepEqual(unmentionedStandards(regulations, (path) => named[path]).problems, []);
   });
+
+  test('accepts a soul that starts with a number its row names, or names with one space what the row spaces twice', () => {
+    const spaced = [
+      '## By Industry (2 souls)',
+      '',
+      '| Soul | Focus | Key Standards and Regulations |',
+      '|------|-------|-------------------------------|',
+      '| [health](souls/health.md) | Patient data | HIPAA, 508 |',
+      '| [audit](souls/audit.md) | Certification | ISO  27001 |',
+    ].join('\n');
+    const mentioned = {
+      'souls/health.md': '508 applies, and so does HIPAA.',
+      'souls/audit.md': 'Follows ISO 27001.',
+    };
+    assert.deepEqual(unmentionedStandards(spaced, (path) => mentioned[path]), { problems: [], names: 3 });
+  });
 });
 
 describe('standardNames', () => {
@@ -563,6 +641,36 @@ describe('standardNames', () => {
   test('reads a leading number with the word before it, and skips a part with no name word', () => {
     assert.deepEqual(standardNames('FedRAMP, Section 508, ATO process, FISMA'), ['FedRAMP', 'Section 508', 'ATO', 'FISMA']);
     assert.deepEqual(standardNames('21 CFR Part 11, Fair Housing Act, attorney-client privilege'), ['21 CFR Part 11']);
+  });
+
+  test('reads a part that starts with a number without the space after the comma before it', () => {
+    assert.deepEqual(standardNames('HIPAA, 508'), ['HIPAA', '508']);
+  });
+
+  test('reads a run of spaces or a tab between two words as one space', () => {
+    assert.deepEqual(standardNames('ISO  27001, SOC\t2'), ['ISO 27001', 'SOC 2']);
+  });
+});
+
+describe('standardsExamples', () => {
+  test('reads each example of a name read whole, read as another name, or not checked', () => {
+    const guide = [
+      "Intro. If you change a row of the README's By Industry table, run `node --test scripts/check-souls.test.mjs`;",
+      "it checks names. Commas and slashes split that column; a name is read when, so HL7 FHIR is read whole,",
+      'WCAG 2.1 AA is read whole, OSHA reporting requirements is read as OSHA and ABA Model Rules is read as ABA.',
+      'When it is a number, the word before it is read too, so Section 508 is read as Section 508, not 508.',
+      'A name with no such word is not read, so the test does not check Fair Housing Act or attorney-client privilege.',
+      'If you change a template, Late Rule is read whole.',
+    ].join(' ');
+    assert.deepEqual(standardsExamples(guide).examples, [
+      ['HL7 FHIR', ['HL7 FHIR']],
+      ['WCAG 2.1 AA', ['WCAG 2.1 AA']],
+      ['OSHA reporting requirements', ['OSHA']],
+      ['ABA Model Rules', ['ABA']],
+      ['Section 508', ['Section 508']],
+      ['Fair Housing Act', []],
+      ['attorney-client privilege', []],
+    ]);
   });
 });
 
@@ -1993,15 +2101,29 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
 // hackmyagent secure --ignore <check> keeps a finding out of the Findings list and does not clear it:
 // the report still counts the finding in its severity totals, its categories and its verdict, and the
 // command still exits 1. IGNORE_SENTENCE is a sentence that starts at an inline code span naming the
-// option, up to its period.
-const IGNORE_SENTENCE = /`--ignore\b[^`]*`[^.]*\./g;
+// option, up to its period. A span that no period follows starts no sentence: IGNORE_SENTENCE matches it
+// up to the end of its line, with an empty group where the period would be, so the rest of a line is read
+// once, rather than once for every such span on it.
+const IGNORE_SENTENCE = /`--ignore\b[^`]*`[^.]*(\.|$)/g;
 
-// Returns `<file>:<line>: <sentence>` for each IGNORE_SENTENCE in a markdown file. A line ends at LF or
-// CR LF.
+// Returns `<file>:<line>: <sentence>` for each IGNORE_SENTENCE that ends at a period in a markdown file.
+// A line ends at LF or CR LF.
 function ignoreSentences(file, text) {
   return text.split(/\r?\n/).flatMap((line, index) =>
-    [...line.matchAll(IGNORE_SENTENCE)].map(([sentence]) => `${file}:${index + 1}: ${sentence}`),
+    [...line.matchAll(IGNORE_SENTENCE)]
+      .filter(([, period]) => period)
+      .map(([sentence]) => `${file}:${index + 1}: ${sentence}`),
   );
+}
+
+// IGNORE_ONLY_HIDES is the words that say the option only hides the finding from the list, with the text
+// that follows them, so that text is read once, rather than once for every repeat of the words.
+const IGNORE_ONLY_HIDES = / only hides the finding from the list; (.*)/g;
+
+// Whether a sentence about --ignore says that the option only hides the finding from the list and, after
+// that, that the command still exits 1.
+function saysIgnoreOnlyHides(sentence) {
+  return [...sentence.matchAll(IGNORE_ONLY_HIDES)].some(([, rest]) => /\bstill exits 1\b/.test(rest));
 }
 
 describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () => {
@@ -2012,6 +2134,64 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
     ]);
   });
 
+  test('reads a sentence up to the first period after its --ignore code span, and none when no period follows', () => {
+    const text = [
+      '`--ignore A` and `--ignore B` each hide one. `--ignore C` and `--ignore D` then follow',
+      '`--ignore a.b` names a check with a period in its name',
+      '`--ignore a.b` does too. So does `--ignore c.d`.',
+      'An `--ignore x. that is not closed',
+    ].join('\n');
+    assert.deepEqual(ignoreSentences('a.md', text), [
+      'a.md:1: `--ignore A` and `--ignore B` each hide one.',
+      'a.md:3: `--ignore a.b` does too.',
+      'a.md:3: `--ignore c.d`.',
+    ]);
+  });
+
+  test('reads a long line of --ignore code spans that no period follows in linear time', () => {
+    // Returns the time taken to read a line of the given number of --ignore code spans with no period.
+    // Reading the rest of the line from each span took time that grew with the square of the number of
+    // spans: twice the spans, four times as long.
+    const read = (spans) => {
+      const line = '`--ignore x` '.repeat(spans);
+      const start = performance.now();
+      assert.deepEqual(ignoreSentences('a.md', line), []);
+      return performance.now() - start;
+    };
+    const elapsed = read(20_000);
+    assert.ok(elapsed < 1000, `read in ${Math.round(elapsed)} ms`);
+    const fastest = (spans) => Math.min(...Array.from({ length: 10 }, () => read(spans)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the spans took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('a sentence passes when still exits 1, as whole words, follows the words about hiding the finding', () => {
+    const hides = 'a.md:1: `--ignore X` only hides the finding from the list; ';
+    assert.equal(saysIgnoreOnlyHides(`${hides}the command still exits 1.`), true);
+    assert.equal(saysIgnoreOnlyHides(`${hides}it only hides the finding from the list; it still exits 1.`), true);
+    assert.equal(saysIgnoreOnlyHides(`${hides}the command exits 0.`), false);
+    assert.equal(saysIgnoreOnlyHides(`${hides}the command still exits 10.`), false);
+    assert.equal(saysIgnoreOnlyHides('a.md:1: `--ignore X` still exits 1 and only hides the finding from the list; '), false);
+    assert.equal(saysIgnoreOnlyHides('a.md:1: `--ignore X` clears the finding and the command still exits 1.'), false);
+  });
+
+  test('checks a long sentence that repeats the words about hiding in linear time', () => {
+    // Returns the time taken to check a sentence of the given number of repeats of those words, which
+    // never says that the command still exits 1. Reading the rest of the sentence from each repeat took
+    // time that grew with the square of the number of repeats: twice the repeats, four times as long.
+    const check = (repeats) => {
+      const sentence = ' only hides the finding from the list; '.repeat(repeats);
+      const start = performance.now();
+      assert.equal(saysIgnoreOnlyHides(sentence), false);
+      return performance.now() - start;
+    };
+    const elapsed = check(20_000);
+    assert.ok(elapsed < 1000, `checked in ${Math.round(elapsed)} ms`);
+    const fastest = (repeats) => Math.min(...Array.from({ length: 10 }, () => check(repeats)));
+    const ratio = fastest(20_000) / fastest(5_000);
+    assert.ok(ratio < 6, `four times the repeats took ${ratio.toFixed(2)} times as long`);
+  });
+
   test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
     const sentences = docTexts().flatMap(([file, text]) => ignoreSentences(file, text));
     for (const file of ['README.md', 'guides/soul-hardening.md']) {
@@ -2020,10 +2200,7 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
         `no sentence that starts at --ignore found in ${file}`,
       );
     }
-    assert.deepEqual(
-      sentences.filter((sentence) => !/ only hides the finding from the list; .*\bstill exits 1\b/.test(sentence)),
-      [],
-    );
+    assert.deepEqual(sentences.filter((sentence) => !saysIgnoreOnlyHides(sentence)), []);
   });
 });
 
@@ -2067,6 +2244,41 @@ function unnamedGuardSigns(file, text) {
     });
     return unnamed ? [`${file}:${index + 1}: ${line.trim()}`] : [];
   });
+}
+
+// The sentence that says what kind of record guard sign writes, and the two sections that explain signing,
+// each as its file and its heading line as the file writes it.
+const HASH_NOTE = /The record is a hash, not a keyed signature/;
+const HASH_NOTE_SECTIONS = [
+  ['README.md', '## Soul Integrity'],
+  ['guides/soul-hardening.md', '### 1. Integrity Verification with ConfigGuard'],
+];
+
+// Returns the text under the heading line `heading` in a markdown `text`: the lines after the first such
+// line, up to the next heading of the same or a higher level or to the end of the text, so a section keeps
+// its subsections. `heading` is the whole line, with its # marks. A line inside a fenced code block is not
+// a heading, so a # comment in a shell example neither starts nor ends a section. Returns undefined when
+// the text has no such heading. A line ends at LF or CR LF.
+function docSection(text, heading) {
+  const level = heading.match(/^#+/)[0].length;
+  let fence = null;
+  let section;
+  for (const line of text.split(/\r?\n/)) {
+    const marker = line.match(/^\s*(```|~~~)/);
+    if (marker) {
+      if (fence === null) fence = marker[1];
+      else if (fence === marker[1]) fence = null;
+    } else if (fence === null) {
+      const marks = line.match(/^(#{1,6}) /)?.[1];
+      if (section && marks && marks.length <= level) break;
+      if (!section && line.trimEnd() === heading) {
+        section = [];
+        continue;
+      }
+    }
+    section?.push(line);
+  }
+  return section?.join('\n');
 }
 
 // A guard sign or guard verify command after `npx --yes opena2a-cli@latest`, and the < or > that ends it, if
@@ -2597,17 +2809,77 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     );
   });
 
+  test('reads a section up to the next heading of the same or a higher level, and keeps its subsections', () => {
+    const text = [
+      '# Guide',
+      '## Signing',
+      'Sign the file.',
+      '### Details',
+      'The record is a hash.',
+      '## Scanning',
+      'Scan the file.',
+      '# Appendix',
+    ].join('\n');
+    assert.equal(docSection(text, '## Signing'), 'Sign the file.\n### Details\nThe record is a hash.');
+    assert.equal(docSection(text, '### Details'), 'The record is a hash.');
+    assert.equal(docSection(text, '## Scanning'), 'Scan the file.');
+    assert.equal(docSection(text, '# Appendix'), '');
+    assert.equal(docSection(text, '## Verifying'), undefined);
+    assert.equal(docSection('## Signing\r\nSign the file.\r\n## Scanning\r\n', '## Signing'), 'Sign the file.');
+  });
+
+  test('does not read a line inside a fenced code block as the heading that starts or ends a section', () => {
+    const text = [
+      '## Example',
+      '```markdown',
+      '## Signing',
+      'A soul section, not this section.',
+      '```',
+      '## Signing',
+      '```bash',
+      '# Sign after review and approval',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
+      '```',
+      'The record is a hash.',
+      '## Scanning',
+    ].join('\n');
+    assert.equal(
+      docSection(text, '## Signing'),
+      '```bash\n# Sign after review and approval\nnpx --yes opena2a-cli@latest guard sign --files SOUL.md\n```\nThe record is a hash.',
+    );
+  });
+
+  // A document that tells a reader to sign in one section and says what the record is in another has the
+  // sentence, and its signing section does not.
+  test('does not read the sentence about the record in another section as part of the section that explains signing', () => {
+    const text = [
+      '## Quick Start',
+      'The record is a hash, not a keyed signature.',
+      '## Soul Integrity',
+      'Sign your soul file with `guard sign --files SOUL.md`.',
+      '## Related Projects',
+      'The record is a hash, not a keyed signature.',
+    ].join('\n');
+    assert.match(text, HASH_NOTE);
+    assert.doesNotMatch(docSection(text, '## Soul Integrity'), HASH_NOTE);
+  });
+
   // guard sign writes each file's SHA-256 hash to GUARD_STORE, with no key and no signature value, so anyone
-  // who can edit a soul can also sign it again. The documents call the record a hash and say so where they
-  // tell a reader to sign, rather than call it a cryptographic signature.
-  test('README.md, CONTRIBUTING.md and the guides call what guard sign records a hash, not a cryptographic signature', () => {
+  // who can edit a soul can also sign it again. The documents do not use the word cryptographic, so none
+  // calls the record a cryptographic signature. Each of the HASH_NOTE_SECTIONS names the signing command and
+  // says that the record is a hash, not a keyed signature. The other places that tell a reader to run guard
+  // sign are not checked for that sentence.
+  test('no document calls what guard sign records a cryptographic signature, and the two sections that explain signing say it is a hash, not a keyed signature', () => {
     const texts = docTexts();
     const claims = texts.flatMap(([file, text]) =>
       text.split(/\r?\n/).flatMap((line, index) => (/cryptograph/i.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [])),
     );
     assert.deepEqual(claims, []);
-    for (const file of ['README.md', 'guides/soul-hardening.md']) {
-      assert.match(texts.find(([name]) => name === file)[1], /The record is a hash, not a keyed signature/, file);
+    for (const [file, heading] of HASH_NOTE_SECTIONS) {
+      const section = docSection(texts.find(([name]) => name === file)[1], heading);
+      assert.notEqual(section, undefined, `${file} has no "${heading}" section`);
+      assert.ok(section.includes('guard sign --files SOUL.md'), `${file}, "${heading}": no guard sign --files SOUL.md command`);
+      assert.match(section, HASH_NOTE, `${file}, "${heading}"`);
     }
   });
 
