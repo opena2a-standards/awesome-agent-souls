@@ -546,6 +546,22 @@ describe('unmentionedStandards', () => {
     };
     assert.deepEqual(unmentionedStandards(regulations, (path) => named[path]).problems, []);
   });
+
+  test('accepts a soul that starts with a number its row names, or names with one space what the row spaces twice', () => {
+    const spaced = [
+      '## By Industry (2 souls)',
+      '',
+      '| Soul | Focus | Key Standards and Regulations |',
+      '|------|-------|-------------------------------|',
+      '| [health](souls/health.md) | Patient data | HIPAA, 508 |',
+      '| [audit](souls/audit.md) | Certification | ISO  27001 |',
+    ].join('\n');
+    const mentioned = {
+      'souls/health.md': '508 applies, and so does HIPAA.',
+      'souls/audit.md': 'Follows ISO 27001.',
+    };
+    assert.deepEqual(unmentionedStandards(spaced, (path) => mentioned[path]), { problems: [], names: 3 });
+  });
 });
 
 describe('standardNames', () => {
@@ -563,6 +579,14 @@ describe('standardNames', () => {
   test('reads a leading number with the word before it, and skips a part with no name word', () => {
     assert.deepEqual(standardNames('FedRAMP, Section 508, ATO process, FISMA'), ['FedRAMP', 'Section 508', 'ATO', 'FISMA']);
     assert.deepEqual(standardNames('21 CFR Part 11, Fair Housing Act, attorney-client privilege'), ['21 CFR Part 11']);
+  });
+
+  test('reads a part that starts with a number without the space after the comma before it', () => {
+    assert.deepEqual(standardNames('HIPAA, 508'), ['HIPAA', '508']);
+  });
+
+  test('reads a run of spaces or a tab between two words as one space', () => {
+    assert.deepEqual(standardNames('ISO  27001, SOC\t2'), ['ISO 27001', 'SOC 2']);
   });
 });
 
