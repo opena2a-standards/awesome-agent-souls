@@ -1620,8 +1620,10 @@ const GUARD_COMMAND = new RegExp(
 // in `(npx --yes opena2a-cli@latest guard verify)`, a redirection (< or >) or the end of its line, which
 // ends at LF or CR LF. A < or > followed by ( is not a redirection: bash and zsh read <(...) and >(...) as
 // a process substitution and join the path it opens to the word, as in verify/dev/fd/63. The < or > is
-// kept in its word and the command ends at the (, so the opt-in run passes `verify<`, not `verify`, to
-// opena2a-cli, and a test that looks for a guard verify command does not count it. As in the shell, a #
+// kept in its word and the command ends at the (. A word after the subcommand, as in SOUL.md>, is passed
+// on to opena2a-cli. A subcommand read this way, as in verify<, is neither sign nor verify, so the opt-in
+// run, which runs only a command whose second word is `sign` or `verify`, does not run it, and a test that
+// looks for a guard verify command does not count it. As in the shell, a #
 // starts a comment only at the start of a word, after a space, a tab or a character that ends the command,
 // as in `;#x`, and a # inside a word is part of
 // it, as in SOUL.md#x. A number of one or more digits written just before a redirection, with no space or
@@ -2196,6 +2198,24 @@ describe('guardProblems', () => {
     assert.deepEqual(guardProblems(cli, [sign, verify], soul, { timeout: 500 }), [
       `${cli.join(' ')} guard sign --files SOUL.md did not finish within 0.5 seconds; stopped at this command`,
     ]);
+  });
+
+  test('passes on a word that ends in < or > before ( and does not run a subcommand that does', () => {
+    const path = join(dir, 'log-words.mjs');
+    const log = join(dir, 'words.log');
+    writeFileSync(
+      path,
+      `import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(log)}, process.argv.slice(2).join(' ') + '\\n');\n`,
+    );
+    const cli = [process.execPath, path];
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md>(cat)',
+      'npx --yes opena2a-cli@latest guard verify<(cat x)',
+    ].join('\n');
+    assert.deepEqual(guardProblems(cli, guardCommands([['a.md', text]]), soul), [
+      `${cli.join(' ')} guard sign --files SOUL.md> did not write ${GUARD_STORE}`,
+    ]);
+    assert.equal(readFileSync(log, 'utf8'), 'guard sign --files SOUL.md>\n');
   });
 });
 
