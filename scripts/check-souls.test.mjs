@@ -157,6 +157,51 @@ function scanSoulProblems(command, souls, { timeout = SCAN_TIMEOUT_MS } = {}) {
   return problems;
 }
 
+// The prose check lists the files git tracks, so it needs a git clone. Returns why `dir` is not the top
+// of a git work tree, as in a source archive with no .git directory, or false when it is.
+function notAGitClone(dir) {
+  const { status, stdout, stderr, error } = spawnSync('git', ['rev-parse', '--show-prefix'], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  if (error) return `git did not run (${error.code})`;
+  if (status !== 0) return stderr.trim().split(/\r?\n/)[0] || `git rev-parse exited with status ${status}`;
+  return stdout.trim() ? 'the directory is inside a git repository but is not its top' : false;
+}
+
+const GIT_RUNS = !spawnSync('git', ['--version']).error;
+
+describe('notAGitClone', { skip: !GIT_RUNS && 'git did not run' }, () => {
+  let repo;
+  let archive;
+  before(() => {
+    repo = mkdtempSync(join(tmpdir(), 'check-souls-clone-'));
+    const { status, stderr } = spawnSync('git', ['init', '--quiet'], { cwd: repo, encoding: 'utf8' });
+    assert.equal(status, 0, `git init failed: ${stderr}`);
+    mkdirSync(join(repo, 'sub'));
+    // A .git file that names a missing directory, so git finds no repository here or above.
+    archive = mkdtempSync(join(tmpdir(), 'check-souls-archive-'));
+    writeFileSync(join(archive, '.git'), 'gitdir: ./missing\n');
+  });
+  after(() => {
+    for (const dir of [repo, archive]) rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('accepts the top of a git work tree', () => {
+    assert.equal(notAGitClone(repo), false);
+  });
+
+  test('gives the reason git gives for a directory with no repository', () => {
+    assert.match(notAGitClone(archive), /\S/);
+  });
+
+  test('rejects a directory below the top of a git work tree', () => {
+    assert.equal(notAGitClone(join(repo, 'sub')), 'the directory is inside a git repository but is not its top');
+  });
+});
+
+const NOT_A_CLONE = notAGitClone(repoRoot);
+
 describe('this repository', () => {
   test('every soul and template meets the CONTRIBUTING.md requirements table', () => {
     const { problems, fileCount, ruleCount } = checkRepository(repoRoot);
@@ -165,11 +210,15 @@ describe('this repository', () => {
     assert.ok(ruleCount > 0, 'no rules were read from CONTRIBUTING.md');
   });
 
-  test('the prose of every tracked Markdown file passes scripts/check-docs-prose.mjs', () => {
-    const { problems, fileCount } = checkProse(repoRoot);
-    assert.deepEqual(problems, []);
-    assert.ok(fileCount > 0, 'no Markdown files were checked');
-  });
+  test(
+    'the prose of every tracked Markdown file passes scripts/check-docs-prose.mjs',
+    { skip: NOT_A_CLONE && `the prose check needs a git clone: ${NOT_A_CLONE}` },
+    () => {
+      const { problems, fileCount } = checkProse(repoRoot);
+      assert.deepEqual(problems, []);
+      assert.ok(fileCount > 0, 'no Markdown files were checked');
+    },
+  );
 
   test('CONTRIBUTING.md says whether pull requests run CI, matching the repository', () => {
     const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
