@@ -1267,14 +1267,16 @@ describe('command line', () => {
 // or `_`, between them, as in `(Run npx --yes hackmyagent@latest.)` or `**guard sign --files.**`. A period
 // followed by any other character, such as a word character, another period, a comma, a backtick or a
 // no-break space, is part of a word to the shell, as in @latest.1, @latest... or --files.md. NPX_PINNED
-// and GUARD_SIGN_FILES both read a period after their last word this way.
+// and GUARD_SIGN_FILES read a period after their last word this way, and guardCommands reads a period at
+// the end of any word of a guard command this way.
 const SENTENCE_PERIOD = /\.[)\]"'*_]*(?=[ \t]|$)/;
 
 // npx runs a hackmyagent or opena2a-cli that is already installed, even an older release, unless the
 // command asks for @latest, and without --yes it stops to ask before installing. A command is pinned
-// when `--yes <package>@latest` is followed by a space, a tab, a backtick, a SENTENCE_PERIOD or the end
-// of its line. Any other period after @latest makes it part of a longer word, as in @latest.1, which
-// names another release.
+// when `--yes <package>@latest` is followed by a space, a tab, a backtick, by ;, |, &, (, ), < or >,
+// which end a word in the shell, as in `(npx --yes hackmyagent@latest)` or `@latest|tee x`, by a
+// SENTENCE_PERIOD or by the end of its line. Any other period after @latest makes it part of a longer
+// word, as in @latest.1, which names another release.
 // An npx command runs the package named by its first word that is not an option, so prose such as
 // "npx downloads hackmyagent" names the package without running it. The shell separates words by any
 // run of spaces and tabs, and NPX_PINNED does too. NPX_PACKAGE also separates words by other
@@ -1289,7 +1291,7 @@ const SENTENCE_PERIOD = /\.[)\]"'*_]*(?=[ \t]|$)/;
 const NPX_PACKAGE =
   /^[\s\u{85}\u{200b}]+(?:-[^\s\u{85}\u{200b}]*(?:(?:(?![ \t])[\s\u{85}\u{200b}])+[^-\s\u{85}\u{200b}][^\s\u{85}\u{200b}]*)*[\s\u{85}\u{200b}]+)*(?:hackmyagent|opena2a-cli)\b/u;
 const NPX_PINNED = new RegExp(
-  String.raw`^[ \t]+--yes[ \t]+(?:hackmyagent|opena2a-cli)@latest(?=[ \t\`]|${SENTENCE_PERIOD.source}|$)`,
+  String.raw`^[ \t]+--yes[ \t]+(?:hackmyagent|opena2a-cli)@latest(?=[ \t\`;|&()<>]|${SENTENCE_PERIOD.source}|$)`,
 );
 
 // The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
@@ -1343,7 +1345,6 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       'npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
       'git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
       'npx --yes hackmyagent@latest/next secure .',
-      '(npx --yes opena2a-cli@latest) guard verify',
       'Run npx --yes hackmyagent@latest, then read the report.',
       "HACKMYAGENT='npx --yes hackmyagent@latest'",
       'npx --yes hackmyagent@latest.npx secure .',
@@ -1356,10 +1357,31 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
       'a.md:10: npx --yes hackmyagent@latest secure . && npx hackmyagent scan-soul .',
       'a.md:11: git checkout <hash> -- SOUL.md && npx opena2a-cli guard sign SOUL.md',
       'a.md:12: npx --yes hackmyagent@latest/next secure .',
-      'a.md:13: (npx --yes opena2a-cli@latest) guard verify',
-      'a.md:14: Run npx --yes hackmyagent@latest, then read the report.',
-      "a.md:15: HACKMYAGENT='npx --yes hackmyagent@latest'",
-      'a.md:16: npx --yes hackmyagent@latest.npx secure .',
+      'a.md:13: Run npx --yes hackmyagent@latest, then read the report.',
+      "a.md:14: HACKMYAGENT='npx --yes hackmyagent@latest'",
+      'a.md:15: npx --yes hackmyagent@latest.npx secure .',
+    ]);
+  });
+
+  test('a command is pinned when @latest is followed by ;, |, &, (, ), < or >, which end a word in the shell', () => {
+    const text = [
+      '(npx --yes opena2a-cli@latest) guard verify',
+      '(Run npx --yes hackmyagent@latest).',
+      'npx --yes hackmyagent@latest|tee x',
+      'npx --yes hackmyagent@latest;ls',
+      'npx --yes hackmyagent@latest&&ls',
+      'npx --yes hackmyagent@latest&',
+      'npx --yes hackmyagent@latest<in',
+      'npx --yes hackmyagent@latest>out',
+      'npx --yes hackmyagent@latest(x)',
+      'npx --yes hackmyagent@latest#x',
+      '[Run npx --yes hackmyagent@latest]',
+      'npx --yes hackmyagent@latest=1',
+    ].join('\n');
+    assert.deepEqual(unpinnedNpxCommands('a.md', text), [
+      'a.md:10: npx --yes hackmyagent@latest#x',
+      'a.md:11: [Run npx --yes hackmyagent@latest]',
+      'a.md:12: npx --yes hackmyagent@latest=1',
     ]);
   });
 
@@ -1572,22 +1594,32 @@ function unnamedGuardSigns(file, text) {
   });
 }
 
+// A guard sign or guard verify command after `npx --yes opena2a-cli@latest`, and the < or > that ends it, if
+// one does. guardCommands reads it.
+const GUARD_COMMAND = new RegExp(
+  String.raw`npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b(?:(?!(?<![ \t.])${SENTENCE_PERIOD.source})[^\`#&;|()<>])*)([<>]?)`,
+  'g',
+);
+
 // Returns the words after `npx --yes opena2a-cli@latest` in each distinct guard sign and guard verify
 // command in the texts. A command ends at a backtick, a # comment, &, as in && or 2>&1, ;, |, ( or ), as
 // in `(npx --yes opena2a-cli@latest guard verify)`, a redirection (< or >) or the end of its line, which
 // ends at LF or CR LF. A number of one or more digits written just before a redirection, with no space or
 // tab between them, as in 2> or 0<, names the file descriptor it opens and is not a word. This follows
-// bash and POSIX sh, which read 10>out that way too; zsh reads only a single digit that way, and reads
-// the 10 in 10>out as a word. Its words are separated by spaces and tabs only, as the shell separates
-// them, so the opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as one word, as
-// a shell would. Quotes are not read:
+// bash and POSIX sh, which read 10>out that way too; zsh and dash, the /bin/sh of Debian and Ubuntu, read
+// only a single digit that way, and read the 10 in 10>out as a word. A SENTENCE_PERIOD at the end of a
+// word also ends the command, as in `Run npx --yes opena2a-cli@latest guard verify.`, so the opt-in run
+// passes `verify`, not `verify.`, to opena2a-cli. A period after a space, a tab or another period starts
+// or continues a word, as in `--files .` or `verify...`, and is kept. Its words are separated by spaces
+// and tabs only, as the shell separates them, so the opt-in run passes `--files`, a no-break space and
+// `SOUL.md` to opena2a-cli as one word, as a shell would. Quotes are not read:
 // `--files "a b.md"` is read as the words `"a` and `b.md"`, so a test checks that no command in the docs
 // quotes a word.
 function guardCommands(texts) {
   const commands = new Map();
   for (const [, text] of texts) {
     for (const line of text.split(/\r?\n/)) {
-      const matches = line.matchAll(/npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b[^`#&;|()<>]*)([<>]?)/g);
+      const matches = line.matchAll(GUARD_COMMAND);
       for (const [, command, redirection] of matches) {
         const words = command.split(/[ \t]+/).filter((word) => word !== '');
         if (redirection && !/[ \t]$/.test(command) && /^\d+$/.test(words.at(-1))) words.pop();
@@ -1887,10 +1919,38 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md|cat',
       '(npx --yes opena2a-cli@latest guard sign --files SOUL.md)',
       '(cd agent && npx --yes opena2a-cli@latest guard verify)',
+      'npx --yes opena2a-cli@latest guard verify (after each edit)',
     ].join('\n');
     assert.deepEqual(guardCommands([['a.md', text]]), [
       ['guard', 'sign', '--files', 'SOUL.md'],
       ['guard', 'verify'],
+    ]);
+  });
+
+  test('ends a guard command at a sentence period at the end of a word, and keeps any other period', () => {
+    const text = [
+      'Run npx --yes opena2a-cli@latest guard verify.',
+      '(Then run npx --yes opena2a-cli@latest guard sign --files SOUL.md.)',
+      '**Run npx --yes opena2a-cli@latest guard sign --files a.md.**',
+      'Run npx --yes opena2a-cli@latest guard sign --files b.md. Then commit it.',
+      'Run npx --yes opena2a-cli@latest guard sign --files c.md.\tThen commit it.',
+      'npx --yes opena2a-cli@latest guard sign --files d.md.bak',
+      'npx --yes opena2a-cli@latest guard sign --files e.md...',
+      'npx --yes opena2a-cli@latest guard sign --files f.md.\u{a0}g.md',
+      'npx --yes opena2a-cli@latest guard sign --files h.md., i.md',
+      'npx --yes opena2a-cli@latest guard sign --files .',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'verify'],
+      ['guard', 'sign', '--files', 'SOUL.md'],
+      ['guard', 'sign', '--files', 'a.md'],
+      ['guard', 'sign', '--files', 'b.md'],
+      ['guard', 'sign', '--files', 'c.md'],
+      ['guard', 'sign', '--files', 'd.md.bak'],
+      ['guard', 'sign', '--files', 'e.md...'],
+      ['guard', 'sign', '--files', 'f.md.\u{a0}g.md'],
+      ['guard', 'sign', '--files', 'h.md.,', 'i.md'],
+      ['guard', 'sign', '--files', '.'],
     ]);
   });
 
