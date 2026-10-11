@@ -129,6 +129,25 @@ function standardNames(cell) {
   return names;
 }
 
+// Returns the description of the standards test in `guide`, from its sentence on the By Industry table to
+// the next `If you change`, and the examples it gives of the names `standardNames` reads, each as a cell
+// and the names read from it: `<cell> is read whole` and `<cell> is read as <name>` give one name, and
+// `does not check <cell> or <cell>` gives none.
+function standardsExamples(guide) {
+  const start = guide.indexOf("If you change a row of the README's By Industry");
+  assert.ok(start >= 0, 'CONTRIBUTING.md: the description of the standards test was not found');
+  const end = guide.indexOf('If you change', start + 1);
+  const text = guide.slice(start, end < 0 ? undefined : end);
+  const name = String.raw`(?:[^,;.]|\.(?=\w))+?`;
+  const examples = [];
+  const read = new RegExp(String.raw`(?:, (?:so )?|\bso | and )(${name}) is read (?:whole|as (${name}))(?=[,;]|\.(?!\w)| and )`, 'g');
+  for (const [, cell, as] of text.matchAll(read)) examples.push([cell, [as ?? cell]]);
+  for (const [, list] of text.matchAll(/does not check (.+?)(?=[,;]|\.(?!\w))/g)) {
+    for (const cell of list.split(' or ')) examples.push([cell, []]);
+  }
+  return { text, examples };
+}
+
 // Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
 // one problem for each name `standardNames` reads from it that the soul the row links to does not
 // mention, and the number of names read. The soul may break a name of several words across lines.
@@ -396,6 +415,18 @@ describe('this repository', () => {
     assert.ok(names > 0, 'no standard or regulation names were read from the README.md tables');
   });
 
+  test('CONTRIBUTING.md says the standards test checks only the names it reads, and how it reads them', () => {
+    const { text, examples } = standardsExamples(readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8'));
+    assert.match(text, /names each standard it reads from the row's last column/);
+    assert.ok(
+      examples.some(([, names]) => names.length === 0),
+      'CONTRIBUTING.md must name a standard the standards test does not read',
+    );
+    for (const [cell, names] of examples) {
+      assert.deepEqual(standardNames(cell), names, `CONTRIBUTING.md says how ${cell} is read`);
+    }
+  });
+
   test('CONTRIBUTING.md says whether pull requests run CI, matching the repository', () => {
     const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
     const hasWorkflows = existsSync(join(repoRoot, '.github', 'workflows'));
@@ -587,6 +618,28 @@ describe('standardNames', () => {
 
   test('reads a run of spaces or a tab between two words as one space', () => {
     assert.deepEqual(standardNames('ISO  27001, SOC\t2'), ['ISO 27001', 'SOC 2']);
+  });
+});
+
+describe('standardsExamples', () => {
+  test('reads each example of a name read whole, read as another name, or not checked', () => {
+    const guide = [
+      "Intro. If you change a row of the README's By Industry table, run `node --test scripts/check-souls.test.mjs`;",
+      "it checks names. Commas and slashes split that column; a name is read when, so HL7 FHIR is read whole,",
+      'WCAG 2.1 AA is read whole, OSHA reporting requirements is read as OSHA and ABA Model Rules is read as ABA.',
+      'When it is a number, the word before it is read too, so Section 508 is read as Section 508, not 508.',
+      'A name with no such word is not read, so the test does not check Fair Housing Act or attorney-client privilege.',
+      'If you change a template, Late Rule is read whole.',
+    ].join(' ');
+    assert.deepEqual(standardsExamples(guide).examples, [
+      ['HL7 FHIR', ['HL7 FHIR']],
+      ['WCAG 2.1 AA', ['WCAG 2.1 AA']],
+      ['OSHA reporting requirements', ['OSHA']],
+      ['ABA Model Rules', ['ABA']],
+      ['Section 508', ['Section 508']],
+      ['Fair Housing Act', []],
+      ['attorney-client privilege', []],
+    ]);
   });
 });
 
