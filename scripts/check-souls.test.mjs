@@ -3434,6 +3434,17 @@ describe('this test file', () => {
   // bracket that opens its condition, if it has one.
   const STATEMENT_HEAD = /^\s*(?:else\s+)?(?:if|for|while)\s*\(|^\s*else\b/;
 
+  // The words that come before the round brackets of the head of a statement, whose block is not the body
+  // of a function, as `if` does in `if (ready) {` and `await` does in `for await (const item of items) {`.
+  const STATEMENT_WORDS = new Set(['if', 'for', 'await', 'while', 'switch', 'catch', 'with']);
+
+  // Returns whether a block after round brackets that `word`, the token before them, comes before is the
+  // body of a function whose parameters the brackets hold: one named or not, or a method shorthand or a
+  // class method, as `function scale(ratio) {`, `function (ratio) {` and `scale(ratio) {` are.
+  function namesFunction(word) {
+    return /^[A-Za-z_$]/.test(word ?? '') && !STATEMENT_WORDS.has(word);
+  }
+
   // A name in code that nothing calls and that is not a property, as `timeRatio` is in `[timeRatio]`.
   const UNCALLED_NAME = /(?<![\w$.])[\w$]+(?![\w$])(?!\s*\()/g;
 
@@ -3612,13 +3623,16 @@ describe('this test file', () => {
     return false;
   }
 
-  // Returns the names that `code` takes, leaving out the parameters of each arrow function in it and each
-  // name in the body of the arrow function that is one of them, as the arrow function sets those itself.
-  // A body runs on to the comma, semicolon or closing bracket after it that is outside the brackets in it.
+  // Returns the names that `code` takes, leaving out the parameters of each arrow function in it, and of
+  // each function or method whose body is a block, and each name in the body that is one of them, as the
+  // function sets those itself. The body of an arrow function runs on to the comma, semicolon or closing
+  // bracket after it that is outside the brackets in it, and a block runs on to the bracket that closes it.
   function takenNames(code) {
     const tokens = code.match(/\w+|=>|[()[\]{},;]/g) ?? [];
-    // The index of the opening bracket of each closing bracket, and of the token that ends each body.
+    // The index of the opening bracket of each closing bracket, of the closing bracket of each opening
+    // bracket, and of the token that ends the body of each arrow function.
     const opens = [];
+    const closes = [];
     const ends = [];
     const frames = [{ arrows: [] }];
     tokens.forEach((token, index) => {
@@ -3627,35 +3641,45 @@ describe('this test file', () => {
       else if (token === '(' || token === '[' || token === '{') frames.push({ open: index, arrows: [] });
       else if (/^[,;)\]}]$/.test(token)) {
         for (const arrow of frame.arrows.splice(0)) ends[arrow] = index;
-        if (/^[)\]}]$/.test(token) && frames.length > 1) opens[index] = frames.pop().open;
+        if (/^[)\]}]$/.test(token) && frames.length > 1) {
+          opens[index] = frames.pop().open;
+          closes[opens[index]] = index;
+        }
       }
     });
-    // The first and last token of each parameter list with the `=>` after it, and how many parameter lists
-    // start at each token less how many end before it.
+    // The first and last token of each parameter list with the `=>` or the block of a function after it,
+    // the token that ends the body, and how many parameter lists start at each token less how many end
+    // before it.
     const lists = new Array(tokens.length + 1).fill(0);
-    const arrows = [];
+    const bodies = [];
     tokens.forEach((token, index) => {
-      if (token !== '=>') return;
       const last = index - 1;
-      const first = tokens[last] === ')' ? opens[last] : /^\w/.test(tokens[last] ?? '') ? last : undefined;
+      let first;
+      let end;
+      if (token === '=>') {
+        first = tokens[last] === ')' ? opens[last] : /^\w/.test(tokens[last] ?? '') ? last : undefined;
+        end = ends[index];
+      } else if (token === '{' && tokens[last] === ')' && namesFunction(tokens[opens[last] - 1])) {
+        first = opens[last];
+        end = closes[index];
+      }
       if (first === undefined) return;
       lists[first] += 1;
       lists[last + 1] -= 1;
-      arrows.push({ index, first, last });
+      bodies.push({ index, first, last, end: end ?? tokens.length });
     });
     // How many parameter lists each token lies in.
     const inLists = [];
     lists.forEach((count, index) => {
       inLists[index] = (inLists[index - 1] ?? 0) + count;
     });
-    // The names of the parameters that each body starts and stops setting at each token. An arrow function
-    // in a parameter list has its body in that list too, where no name is taken whatever its parameters
-    // are, so its list is not read, and each token is read as a parameter once at most.
+    // The names of the parameters that each body starts and stops setting at each token. A function in a
+    // parameter list has its body in that list too, where no name is taken whatever its parameters are,
+    // so its list is not read, and each token is read as a parameter once at most.
     const starts = [];
     const stops = [];
-    for (const { index, first, last } of arrows) {
+    for (const { index, first, last, end } of bodies) {
       if (inLists[index] > 0) continue;
-      const end = ends[index] ?? tokens.length;
       for (const name of tokens.slice(first, last + 1).filter((word) => /^\w/.test(word))) {
         (starts[index] ??= []).push(name);
         (stops[end] ??= []).push(name);
@@ -3673,7 +3697,7 @@ describe('this test file', () => {
   // is read as a time ratio whatever its name, as a value that calls timeRatio or a name in `calls` that a
   // line gives it is, and one that divides by a value that is not a number, as this file divides nothing
   // else that way; or else the time ratio that it takes, a name `ratio` or a name in `names`, other than as
-  // the parameter of an arrow function in it or a name in `parameters`, if any.
+  // the parameter of a function in it or a name in `parameters`, if any.
   function readValue(value, names, calls, parameters) {
     const call = value.match(/\b\w+(?=\s*\()/g)?.find((word) => calls.has(word));
     if (call === 'timeRatio') return { always: 'a value that calls timeRatio is read as a time ratio' };
@@ -3755,9 +3779,10 @@ describe('this test file', () => {
   }
 
   // Returns, for each line of `codes`, the code of the lines of a file, the parameters of each function
-  // whose body is a block that the line opens, as `(ratio) => {` and `function scale(ratio) {` do, and the
-  // parameters of each whose block it closes. The lines of the block after the line that opens it take
-  // them as the function sets them, and not as time ratios that a line before the function sets.
+  // whose body is a block that the line opens, as `(ratio) => {`, `function scale(ratio) {` and the method
+  // `scale(ratio) {` do, and the parameters of each whose block it closes. The lines of the block after the
+  // line that opens it take them as the function sets them, and not as time ratios that a line before the
+  // function sets.
   function blockParameters(codes) {
     const opens = codes.map(() => []);
     const closes = codes.map(() => []);
@@ -3779,11 +3804,7 @@ describe('this test file', () => {
         if (token === '{' && tokens[last] === '=>') {
           const first = tokens[last - 1] === ')' ? opening[last - 1] : last - 1;
           list = first === undefined ? [] : tokens.slice(first, last);
-        } else if (
-          token === '{' &&
-          before !== undefined &&
-          [tokens[before - 1], tokens[before - 2]].includes('function')
-        ) {
+        } else if (token === '{' && tokens[last] === ')' && before !== undefined && namesFunction(tokens[before - 1])) {
           list = tokens.slice(before, last);
         }
         const parameters = list.filter((word) => /^[A-Za-z_$]/.test(word));
@@ -4453,6 +4474,56 @@ describe('this test file', () => {
     assert.deepEqual(ownTimeRatios(lines), [
       `line 16 sets a time ratio that is not a call of timeRatio; ${takes('ratio')}`,
       `line 18 sets a time ratio that is not a call of timeRatio; ${takes('factor')}`,
+    ]);
+  });
+
+  test('reads no parameter of a method shorthand or a class method as a time ratio that a line of its block takes', () => {
+    const shorthand = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const o = {',
+      '      scale(factor) {',
+      '        const inner = factor;',
+      '      },',
+      '    };',
+    ];
+    assert.deepEqual(ownTimeRatios(shorthand), []);
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const o = {',
+      '      scale(factor) {',
+      '        const inner = factor;',
+      '      },',
+      '      async *shrink(factor) {',
+      '        const smaller = factor - 1;',
+      '      },',
+      '    };',
+      '    class Scaler {',
+      '      constructor(factor) {',
+      '        const kept = factor;',
+      '      }',
+      '      static halve(factor) {',
+      '        const half = factor * 2;',
+      '      }',
+      '      set value(factor) {',
+      '        const stored = factor;',
+      '      }',
+      '    }',
+      '    const quarter = function (factor) {',
+      '      const halved = factor * 2;',
+      '    };',
+      '    while (factor > 1) {',
+      '      const inside = factor * 2;',
+      '    }',
+      '    for await (const item of factor) {',
+      '      const looped = factor + 1;',
+      '    }',
+      '    const after = factor * 2;',
+    ];
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 25 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 28 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 30 sets a time ratio that is not a call of timeRatio; ${takes}`,
     ]);
   });
 
