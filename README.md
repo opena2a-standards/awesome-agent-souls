@@ -42,7 +42,7 @@ AI coding tools read project-level instruction files from the repository root at
 | Cursor | `.cursorrules` | Rename to `.cursorrules`, or reference SOUL.md from `.cursorrules` |
 | Windsurf | `.windsurfrules` | Rename to `.windsurfrules`, or reference SOUL.md |
 | GitHub Copilot | `.github/copilot-instructions.md` | Copy to `.github/copilot-instructions.md` |
-| OpenClaw | `SOUL.md` | Natively reads `SOUL.md` from `~/.openclaw/workspaces/<name>/SOUL.md` (copy directly) |
+| OpenClaw | `SOUL.md` | Natively reads `SOUL.md` from the agent workspace: `~/.openclaw/workspace/SOUL.md` for the default agent, `~/.openclaw/workspace-<name>/SOUL.md` for a named agent (copy directly) |
 | Aider | `.aider.conf.yml` | Reference via `read:` directive |
 | Any tool | Varies | Most tools that read markdown from project root will pick up `SOUL.md` directly |
 
@@ -168,11 +168,12 @@ npx --yes opena2a-cli@latest guard verify
 **Using OpenClaw?** Copy a soul directly into your agent workspace:
 
 ```bash
-# Copy a personal assistant soul into your OpenClaw agent
-cp souls/by-use-case/personal-assistant.md ~/.openclaw/workspaces/default/SOUL.md
+# Copy a personal assistant soul into your default OpenClaw agent
+cp souls/by-use-case/personal-assistant.md ~/.openclaw/workspace/SOUL.md
 
-# Or a customer support agent
-cp souls/by-use-case/customer-support.md ~/.openclaw/workspaces/support-bot/SOUL.md
+# Or add a customer support agent with its own workspace and copy a soul into it
+openclaw agents add support-bot --workspace ~/.openclaw/workspace-support-bot
+cp souls/by-use-case/customer-support.md ~/.openclaw/workspace-support-bot/SOUL.md
 ```
 
 See [Where SOUL.md Lives](#where-soulmd-lives) above for tool-specific placement and discovery details.

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -12,6 +12,13 @@ import { fileURLToPath } from 'node:url';
 import { checkRepository, findProseProblems, isChecked, main } from './check-docs-prose.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// git sets GIT_DIR, and for some commits GIT_INDEX_FILE, in the environment of a hook it runs. Such a
+// variable makes git use the repository it names in place of the one found from the directory git runs
+// in, and these tests run git, directly and through the check, in temporary directories. So the
+// variables git lists as local to a repository are removed before any test runs.
+const localGitVariables = spawnSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' }).stdout ?? '';
+for (const name of localGitVariables.split('\n').filter(Boolean)) delete process.env[name];
 
 const EM_DASH = '—';
 const EN_DASH = '–';
@@ -301,5 +308,52 @@ describe('command line', () => {
     assert.equal(status, 2);
     assert.equal(stdout, '');
     assert.equal(stderr, 'Unknown argument: README.md\nUsage: node scripts/check-docs-prose.mjs\n');
+  });
+
+  test('--help and CONTRIBUTING.md name each changelog, changelog fragment and license it skips', () => {
+    const help = run(['--help']).stdout.replace(/\s+/g, ' ');
+    const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
+    const paragraph = guide.split(/\r?\n/).find((line) => line.includes('It reads the `.md` and `.mdx` files git tracks'));
+    assert.ok(paragraph, 'CONTRIBUTING.md has no paragraph about the prose check');
+    for (const [name, path] of [
+      ['CHANGELOG.md', 'CHANGELOG.md'],
+      ['CHANGELOG.mdx', 'CHANGELOG.mdx'],
+      ['changelog.d', 'changelog.d/1.md'],
+      ['LICENSE', 'LICENSE.md'],
+    ]) {
+      assert.equal(isChecked(path), false, `${path} is checked`);
+      assert.ok(help.includes(name), `--help does not name ${name}`);
+      assert.ok(paragraph.includes(name), `CONTRIBUTING.md does not name ${name}`);
+    }
+  });
+});
+
+describe('this test file', () => {
+  test('the checkRepository tests pass when the environment names another repository, as it does in a git hook', () => {
+    const other = mkdtempSync(join(tmpdir(), 'check-docs-prose-hook-'));
+    try {
+      assert.equal(spawnSync('git', ['init', '--quiet'], { cwd: other }).status, 0);
+      const gitDir = join(other, '.git');
+      // NODE_TEST_CONTEXT marks a process the test runner started; the run below is a separate run.
+      const { NODE_TEST_CONTEXT, ...env } = process.env;
+      const { status, stdout } = spawnSync(
+        process.execPath,
+        [
+          '--test',
+          '--test-reporter=tap',
+          '--test-name-pattern=^checkRepository and main ',
+          fileURLToPath(import.meta.url),
+        ],
+        {
+          encoding: 'utf8',
+          env: { ...env, GIT_DIR: gitDir, GIT_WORK_TREE: other, GIT_INDEX_FILE: join(gitDir, 'index') },
+        },
+      );
+      assert.equal(status, 0, stdout);
+      assert.match(stdout, /^ok \d+ - checkRepository and main$/m);
+      assert.match(stdout, /^# pass [1-9]/m);
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
   });
 });

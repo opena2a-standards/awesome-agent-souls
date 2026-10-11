@@ -31,6 +31,13 @@ import { checkRepository, main, readRules, readSections } from './check-souls.mj
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// git sets GIT_DIR, and for some commits GIT_INDEX_FILE, in the environment of a hook it runs. Such a
+// variable makes git use the repository it names in place of the one found from the directory git runs
+// in, and these tests run git, directly and through the checks, in temporary directories. So the
+// variables git lists as local to a repository are removed before any test runs.
+const localGitVariables = spawnSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' }).stdout ?? '';
+for (const name of localGitVariables.split('\n').filter(Boolean)) delete process.env[name];
+
 // Splits HACKMYAGENT into words. A value that names an existing file is one word, so a scanner's path
 // may contain spaces; otherwise words are separated by spaces, and a quoted word may contain them.
 function scannerCommand(value) {
@@ -94,6 +101,64 @@ function templateSouls() {
     .map((name) => [`templates/${name}`, readFileSync(join(repoRoot, 'templates', name), 'utf8')]);
   assert.ok(templates.length > 0, 'no templates were found');
   return [...templates, ['the Minimal Template in the guide', minimal]];
+}
+
+// The README.md tables whose last column names the standards and regulations each soul covers.
+const STANDARDS_TABLES = ['By Industry', 'By Organization Type'];
+
+// Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
+// one problem for each name in it that the soul the row links to does not mention, and the number of
+// names read. A name is a word of that column that contains a digit or two capital letters, such as
+// GLBA, 62443 or FedRAMP; a phrase with no such word, such as attorney-client privilege, is not read.
+// `readSoul` returns the text of a file the README links to.
+function unmentionedStandards(readme, readSoul) {
+  const problems = [];
+  let names = 0;
+  let table = null;
+  for (const line of readme.split(/\r?\n/)) {
+    const heading = line.match(/^## (.*)/);
+    if (heading) {
+      table = STANDARDS_TABLES.find((name) => heading[1] === name || heading[1].startsWith(`${name} `)) ?? null;
+      continue;
+    }
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    const link = table && cells[0]?.match(/^\[[^\]]*\]\(([^)]+)\)$/);
+    if (!link) continue;
+    const soul = readSoul(link[1]);
+    for (const name of cells.at(-1).split(/[\s,/]+/).filter((word) => /\d|[A-Z].*[A-Z]/.test(word))) {
+      names += 1;
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (!new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i').test(soul)) {
+        problems.push(`${link[1]}: the README.md ${table} table names ${name}, which the soul does not mention`);
+      }
+    }
+  }
+  return { problems, names };
+}
+
+// Reads the table in the By Use Case section of a README and returns, for each row, the file its first
+// cell links and the comma-separated names in its Popular Platforms cell.
+function useCasePlatforms(readme) {
+  const section = readme.split(/^## /m).find((part) => part.startsWith('By Use Case'));
+  assert.ok(section !== undefined, 'README.md: By Use Case section not found');
+  const rows = section
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('|'))
+    .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()));
+  const column = rows[0]?.indexOf('Popular Platforms') ?? -1;
+  assert.ok(column >= 0, 'README.md: the By Use Case table has no Popular Platforms column');
+  return rows.slice(2).map((cells) => ({
+    file: cells[0].match(/\]\(([^)]+)\)/)?.[1],
+    platforms: cells[column].split(',').map((name) => name.trim()).filter(Boolean),
+  }));
+}
+
+// Returns the names in `platforms` that `text` does not contain as a whole word, matched with case.
+function missingPlatforms(text, platforms) {
+  return platforms.filter((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return !new RegExp(`(?<![\\w/])${escaped}(?![\\w/])`).test(text);
+  });
 }
 
 // Runs `<command> scan-soul <dir> --json` on each soul, saved as SOUL.md in a temporary directory,
@@ -220,6 +285,13 @@ describe('this repository', () => {
     },
   );
 
+  test('every soul mentions each standard and regulation its README.md table row names', () => {
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const { problems, names } = unmentionedStandards(readme, (path) => readFileSync(join(repoRoot, path), 'utf8'));
+    assert.deepEqual(problems, []);
+    assert.ok(names > 0, 'no standard or regulation names were read from the README.md tables');
+  });
+
   test('CONTRIBUTING.md says whether pull requests run CI, matching the repository', () => {
     const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
     const hasWorkflows = existsSync(join(repoRoot, '.github', 'workflows'));
@@ -240,6 +312,41 @@ describe('this repository', () => {
     }
   });
 
+  test('every By Use Case soul names each platform its README row lists under Popular Platforms', () => {
+    const rows = useCasePlatforms(readFileSync(join(repoRoot, 'README.md'), 'utf8'));
+    assert.ok(rows.length > 0, 'README.md: the By Use Case table has no rows');
+    const problems = [];
+    for (const { file, platforms } of rows) {
+      assert.ok(file, 'README.md: a By Use Case row does not link its soul');
+      assert.ok(platforms.length > 0, `README.md: the By Use Case row for ${file} lists no platforms`);
+      for (const name of missingPlatforms(readFileSync(join(repoRoot, file), 'utf8'), platforms)) {
+        problems.push(`${file}: does not mention ${name}, which README.md lists under Popular Platforms`);
+      }
+    }
+    assert.deepEqual(problems, []);
+  });
+
+  test('reads the Popular Platforms cell of each By Use Case row and matches names as whole words', () => {
+    const readme = [
+      '## By Use Case (1 soul)',
+      '',
+      '| Soul | Focus | Popular Platforms |',
+      '|------|-------|-------------------|',
+      '| [helper](souls/by-use-case/helper.md) | Notes | X/Twitter, Microsoft Teams |',
+      '',
+      '## By Fleet',
+      '',
+      '| Fleet | Agents |',
+      '|-------|--------|',
+      '| [crew](souls/by-fleet/crew/) | lead |',
+    ].join('\r\n');
+    assert.deepEqual(useCasePlatforms(readme), [
+      { file: 'souls/by-use-case/helper.md', platforms: ['X/Twitter', 'Microsoft Teams'] },
+    ]);
+    assert.deepEqual(missingPlatforms('Post on X/Twitter and in Microsoft Teams.', ['X/Twitter', 'Microsoft Teams']), []);
+    assert.deepEqual(missingPlatforms('Small teams post on Twitter.', ['Teams', 'X/Twitter']), ['Teams', 'X/Twitter']);
+  });
+
   test('reads the Minimal Template from a guide whose lines end with CR LF', () => {
     const guide = '## Minimal Template\r\n\r\n```markdown\r\n# Soul\r\nRefuse role-play.\r\n```\r\n';
     assert.equal(minimalTemplate(guide), '# Soul\r\nRefuse role-play.');
@@ -252,6 +359,43 @@ describe('this repository', () => {
       assert.deepEqual(scanSoulProblems(HACKMYAGENT, templateSouls()), []);
     },
   );
+});
+
+describe('unmentionedStandards', () => {
+  const readme = [
+    '## By Industry (2 souls)',
+    '',
+    '| Soul | Focus | Key Standards and Regulations |',
+    '|------|-------|-------------------------------|',
+    '| [fintech](souls/fintech.md) | Payments | PCI-DSS, KYC/AML, GLBA |',
+    '| [plant](souls/plant.md) | OT systems | IEC 62443, OSHA reporting requirements |',
+    '',
+    '## By Role (1 soul)',
+    '',
+    '| Soul | Focus |',
+    '|------|-------|',
+    '| [writer](souls/writer.md) | SEO copy |',
+  ].join('\n');
+  const souls = {
+    'souls/fintech.md': 'Covers pci-dss, KYC and AML.',
+    'souls/plant.md': 'Cites IEC 62264, IEC 624430 and OSHA.',
+    'souls/writer.md': '',
+  };
+
+  test('reports each name the linked soul does not mention, and none from a table it does not read', () => {
+    assert.deepEqual(unmentionedStandards(readme, (path) => souls[path]), {
+      problems: [
+        'souls/fintech.md: the README.md By Industry table names GLBA, which the soul does not mention',
+        'souls/plant.md: the README.md By Industry table names 62443, which the soul does not mention',
+      ],
+      names: 7,
+    });
+  });
+
+  test('accepts a soul that mentions every name', () => {
+    const covered = { ...souls, 'souls/fintech.md': 'PCI-DSS, KYC, AML and GLBA.', 'souls/plant.md': 'IEC 62443, OSHA.' };
+    assert.deepEqual(unmentionedStandards(readme, (path) => covered[path]).problems, []);
+  });
 });
 
 // A directory a suite's tests share is created in a `before` hook: a test run filtered by name runs
@@ -932,6 +1076,29 @@ describe('command line', () => {
       assert.equal(stderr, '');
     });
   }
+
+  // Spreading a directory's list of files into push overflows the stack from about 125,000 files. With a
+  // stack of 200 KB in place of the default of about 1 MB, 50,000 files are well past that point.
+  test('lists a directory of more files than fit on the stack as the arguments of one call', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-souls-many-'));
+    try {
+      writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE);
+      const dir = join(root, 'souls', 'by-role', 'x');
+      mkdirSync(dir, { recursive: true });
+      for (let i = 0; i < 50000; i++) writeFileSync(join(dir, `${i}.md`), '');
+      const { status, stdout, stderr } = spawnSync(process.execPath, ['--stack-size=200', script, '--root', root], {
+        cwd: elsewhere,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      assert.equal(stderr, '');
+      assert.equal(status, 1);
+      assert.match(stdout, /^souls\/by-role\/x\/49999\.md: not at any location listed in CONTRIBUTING\.md$/m);
+      assert.match(stdout, /^Checked 50000 files in /m);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   test('an unknown argument prints usage to stderr and exits 2', () => {
     const { status, stderr } = run(['--bogus']);
@@ -2201,6 +2368,53 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
   );
 });
 
+// OpenClaw reads an agent's SOUL.md from the agent's workspace, which docs.openclaw.ai places at
+// ~/.openclaw/workspace for the default agent and at ~/.openclaw/workspace-<name> for an agent added by
+// name. A path ends at a space, a quote, a backtick, a parenthesis or |, and a period, comma, colon or
+// semicolon at its end belongs to the sentence. Returns `<file>:<line>: <path>` for each path under
+// ~/.openclaw whose first directory starts with `workspace` and is neither of those, such as
+// ~/.openclaw/workspaces/default, which OpenClaw does not read. A line ends at LF or CR LF.
+function openclawWorkspaceProblems(file, text) {
+  return text.split(/\r?\n/).flatMap((line, index) =>
+    [...line.matchAll(/~\/\.openclaw\/[^\s`'"()|]*/g)]
+      .map(([path]) => path.replace(/[.,:;]+$/, ''))
+      .filter((path) => /^~\/\.openclaw\/workspace/.test(path))
+      .filter((path) => !/^~\/\.openclaw\/workspace(?:-[^/]+)?(?:\/|$)/.test(path))
+      .map((path) => `${file}:${index + 1}: ${path}`),
+  );
+}
+
+describe('OpenClaw workspace paths in README.md, CONTRIBUTING.md and the guides', () => {
+  test('a path names the default workspace or a workspace-<name> directory', () => {
+    const text = [
+      'Natively reads `~/.openclaw/workspace/SOUL.md` or `~/.openclaw/workspace-<name>/SOUL.md`.',
+      'cp souls/a.md ~/.openclaw/workspace/SOUL.md',
+      'cp souls/a.md ~/.openclaw/workspace-support-bot/SOUL.md',
+      'Settings live in `~/.openclaw/openclaw.json`.',
+      'The default workspace is ~/.openclaw/workspace.',
+      'cp souls/a.md ~/.openclaw/workspaces/default/SOUL.md',
+      'Reads `~/.openclaw/workspaces/<name>/SOUL.md` (copy directly)',
+      'cp souls/a.md ~/.openclaw/workspace-/SOUL.md\r',
+      'cp souls/a.md "~/.openclaw/workspace_main/SOUL.md"',
+    ].join('\n');
+    assert.deepEqual(openclawWorkspaceProblems('a.md', text), [
+      'a.md:6: ~/.openclaw/workspaces/default/SOUL.md',
+      'a.md:7: ~/.openclaw/workspaces/<name>/SOUL.md',
+      'a.md:8: ~/.openclaw/workspace-/SOUL.md',
+      'a.md:9: ~/.openclaw/workspace_main/SOUL.md',
+    ]);
+  });
+
+  test('every OpenClaw workspace path is one OpenClaw reads', () => {
+    const texts = docTexts();
+    assert.deepEqual(texts.flatMap(([file, text]) => openclawWorkspaceProblems(file, text)), []);
+    assert.ok(
+      texts.some(([, text]) => text.includes('~/.openclaw/workspace/SOUL.md')),
+      'no file names the default OpenClaw workspace',
+    );
+  });
+});
+
 describe('guardProblems', () => {
   let dir;
   before(() => {
@@ -2324,6 +2538,32 @@ describe('this test file', () => {
       rmSync(temp, { recursive: true, force: true });
     }
   });
+
+  test(
+    'the notAGitClone tests pass when the environment names another repository, as it does in a git hook',
+    { skip: !GIT_RUNS && 'git did not run' },
+    () => {
+      const other = mkdtempSync(join(tmpdir(), 'check-souls-hook-'));
+      try {
+        assert.equal(spawnSync('git', ['init', '--quiet'], { cwd: other }).status, 0);
+        const gitDir = join(other, '.git');
+        const { NODE_TEST_CONTEXT, ...env } = process.env;
+        const { status, stdout } = spawnSync(
+          process.execPath,
+          ['--test', '--test-reporter=tap', '--test-name-pattern=^notAGitClone ', fileURLToPath(import.meta.url)],
+          {
+            encoding: 'utf8',
+            env: { ...env, GIT_DIR: gitDir, GIT_WORK_TREE: other, GIT_INDEX_FILE: join(gitDir, 'index') },
+          },
+        );
+        assert.equal(status, 0, stdout);
+        assert.match(stdout, /^ok \d+ - notAGitClone$/m);
+        assert.match(stdout, /^# pass [1-9]/m);
+      } finally {
+        rmSync(other, { recursive: true, force: true });
+      }
+    },
+  );
 
   // Returns one line for each line of a comment in `lines` that ends inside a sentence and is less than half
   // as wide as the widest line of its comment. A comment is a run of // lines with the same indentation. A
