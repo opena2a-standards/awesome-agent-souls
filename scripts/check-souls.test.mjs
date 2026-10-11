@@ -2162,6 +2162,41 @@ function unnamedGuardSigns(file, text) {
   });
 }
 
+// The sentence that says what kind of record guard sign writes, and the two sections that explain signing,
+// each as its file and its heading line as the file writes it.
+const HASH_NOTE = /The record is a hash, not a keyed signature/;
+const HASH_NOTE_SECTIONS = [
+  ['README.md', '## Soul Integrity'],
+  ['guides/soul-hardening.md', '### 1. Integrity Verification with ConfigGuard'],
+];
+
+// Returns the text under the heading line `heading` in a markdown `text`: the lines after the first such
+// line, up to the next heading of the same or a higher level or to the end of the text, so a section keeps
+// its subsections. `heading` is the whole line, with its # marks. A line inside a fenced code block is not
+// a heading, so a # comment in a shell example neither starts nor ends a section. Returns undefined when
+// the text has no such heading. A line ends at LF or CR LF.
+function docSection(text, heading) {
+  const level = heading.match(/^#+/)[0].length;
+  let fence = null;
+  let section;
+  for (const line of text.split(/\r?\n/)) {
+    const marker = line.match(/^\s*(```|~~~)/);
+    if (marker) {
+      if (fence === null) fence = marker[1];
+      else if (fence === marker[1]) fence = null;
+    } else if (fence === null) {
+      const marks = line.match(/^(#{1,6}) /)?.[1];
+      if (section && marks && marks.length <= level) break;
+      if (!section && line.trimEnd() === heading) {
+        section = [];
+        continue;
+      }
+    }
+    section?.push(line);
+  }
+  return section?.join('\n');
+}
+
 // A guard sign or guard verify command after `npx --yes opena2a-cli@latest`, and the < or > that ends it, if
 // one does. A < or > followed by ( does not end it and is kept in its word, as NPX_PINNED and
 // GUARD_SIGN_FILES read it. The command takes every such < or >, so the < or > after it is never followed by
@@ -2690,17 +2725,77 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     );
   });
 
+  test('reads a section up to the next heading of the same or a higher level, and keeps its subsections', () => {
+    const text = [
+      '# Guide',
+      '## Signing',
+      'Sign the file.',
+      '### Details',
+      'The record is a hash.',
+      '## Scanning',
+      'Scan the file.',
+      '# Appendix',
+    ].join('\n');
+    assert.equal(docSection(text, '## Signing'), 'Sign the file.\n### Details\nThe record is a hash.');
+    assert.equal(docSection(text, '### Details'), 'The record is a hash.');
+    assert.equal(docSection(text, '## Scanning'), 'Scan the file.');
+    assert.equal(docSection(text, '# Appendix'), '');
+    assert.equal(docSection(text, '## Verifying'), undefined);
+    assert.equal(docSection('## Signing\r\nSign the file.\r\n## Scanning\r\n', '## Signing'), 'Sign the file.');
+  });
+
+  test('does not read a line inside a fenced code block as the heading that starts or ends a section', () => {
+    const text = [
+      '## Example',
+      '```markdown',
+      '## Signing',
+      'A soul section, not this section.',
+      '```',
+      '## Signing',
+      '```bash',
+      '# Sign after review and approval',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
+      '```',
+      'The record is a hash.',
+      '## Scanning',
+    ].join('\n');
+    assert.equal(
+      docSection(text, '## Signing'),
+      '```bash\n# Sign after review and approval\nnpx --yes opena2a-cli@latest guard sign --files SOUL.md\n```\nThe record is a hash.',
+    );
+  });
+
+  // A document that tells a reader to sign in one section and says what the record is in another has the
+  // sentence, and its signing section does not.
+  test('does not read the sentence about the record in another section as part of the section that explains signing', () => {
+    const text = [
+      '## Quick Start',
+      'The record is a hash, not a keyed signature.',
+      '## Soul Integrity',
+      'Sign your soul file with `guard sign --files SOUL.md`.',
+      '## Related Projects',
+      'The record is a hash, not a keyed signature.',
+    ].join('\n');
+    assert.match(text, HASH_NOTE);
+    assert.doesNotMatch(docSection(text, '## Soul Integrity'), HASH_NOTE);
+  });
+
   // guard sign writes each file's SHA-256 hash to GUARD_STORE, with no key and no signature value, so anyone
-  // who can edit a soul can also sign it again. The documents call the record a hash and say so where they
-  // tell a reader to sign, rather than call it a cryptographic signature.
-  test('README.md, CONTRIBUTING.md and the guides call what guard sign records a hash, not a cryptographic signature', () => {
+  // who can edit a soul can also sign it again. The documents do not use the word cryptographic, so none
+  // calls the record a cryptographic signature. Each of the HASH_NOTE_SECTIONS names the signing command and
+  // says that the record is a hash, not a keyed signature. The other places that tell a reader to run guard
+  // sign are not checked for that sentence.
+  test('no document calls what guard sign records a cryptographic signature, and the two sections that explain signing say it is a hash, not a keyed signature', () => {
     const texts = docTexts();
     const claims = texts.flatMap(([file, text]) =>
       text.split(/\r?\n/).flatMap((line, index) => (/cryptograph/i.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [])),
     );
     assert.deepEqual(claims, []);
-    for (const file of ['README.md', 'guides/soul-hardening.md']) {
-      assert.match(texts.find(([name]) => name === file)[1], /The record is a hash, not a keyed signature/, file);
+    for (const [file, heading] of HASH_NOTE_SECTIONS) {
+      const section = docSection(texts.find(([name]) => name === file)[1], heading);
+      assert.notEqual(section, undefined, `${file} has no "${heading}" section`);
+      assert.ok(section.includes('guard sign --files SOUL.md'), `${file}, "${heading}": no guard sign --files SOUL.md command`);
+      assert.match(section, HASH_NOTE, `${file}, "${heading}"`);
     }
   });
 
