@@ -1,4 +1,4 @@
-// Run with: node --test scripts/check-souls.test.mjs
+// Run with `node --test scripts/check-souls.test.mjs`.
 // Set HACKMYAGENT to a scanner command, for example HACKMYAGENT='npx --yes hackmyagent@latest', to also
 // run hackmyagent scan-soul on every template and the guide's Minimal Template. The command's words are
 // separated by spaces; quote a word that contains spaces, or set HACKMYAGENT to the scanner's path alone.
@@ -1624,20 +1624,22 @@ const GUARD_COMMAND = new RegExp(
 // kept in its word and the command ends at the (. A word after the subcommand, as in SOUL.md>, is passed
 // on to opena2a-cli. A subcommand read this way, as in verify<, is neither sign nor verify, so the opt-in
 // run, which runs only a command whose second word is `sign` or `verify`, does not run it, and a test that
-// looks for a guard verify command does not count it. As in the shell, a #
-// starts a comment only at the start of a word, after a space, a tab or an operator that ends the
-// command, as in `;#x`, and a # inside a word is part of it, as in SOUL.md#x. A backtick is not such an
-// operator: it ends the command because it closes a Markdown code span. A number of one or more digits
-// written just before a redirection, with no space or tab between them, as in 2> or 0<, names the file
-// descriptor it opens and is not a word. This follows bash and POSIX sh, which read 10>out that way too;
-// zsh and dash, the /bin/sh of Debian and Ubuntu, read only a single digit that way, and read the 10 in
-// 10>out as a word. A SENTENCE_PERIOD at the end of a word also ends the command, as in
+// looks for a guard verify command does not count it. As in the shell, a # starts a comment only at the
+// start of a word, after a space, a tab or an operator that ends the command, as in `;#x`, and a # inside
+// a word is part of it, as in SOUL.md#x. A backtick is not such an operator: it ends the command because
+// it closes a Markdown code span. Nor is the ) that closes $(...): a # after it is part of the word, as
+// after a backtick that closes a command substitution, so `echo $(echo j)#x` prints j#x in bash, zsh and
+// dash, while `(echo c)#x` prints c. A command ends at the ( of $( in any case. A number of one or more
+// digits written just before a redirection, with no space or tab between them, as in 2> or 0<, names the
+// file descriptor it opens and is not a word. This follows bash and POSIX sh, which read 10>out that way
+// too; zsh and dash, the /bin/sh of Debian and Ubuntu, read only a single digit that way, and read the 10
+// in 10>out as a word. A SENTENCE_PERIOD at the end of a word also ends the command, as in
 // `Run npx --yes opena2a-cli@latest guard verify.`, so the opt-in run passes `verify`, not `verify.`, to
 // opena2a-cli. A period after a space, a tab or another period starts or continues a word, as in
 // `--files .` or `verify...`, and is kept. Its words are separated by spaces and tabs only, as the shell
-// separates them, so the opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as
-// one word, as a shell would. Quotes are not read: `--files "a b.md"` is read as the words `"a` and
-// `b.md"`, so a test checks that no command in the docs quotes a word.
+// separates them, so the opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as one
+// word, as a shell would. Quotes are not read: `--files "a b.md"` is read as the words `"a` and `b.md"`,
+// so a test checks that no command in the docs quotes a word.
 function guardCommands(texts) {
   const commands = new Map();
   for (const [, text] of texts) {
@@ -2068,8 +2070,8 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
   });
 
   test('never reads a < or > followed by ( as the redirection that ends a guard command', () => {
-    // Every sequence of up to three of these after `guard verify`: 8,421 lines.
-    const tokens = [' ', '\t', '<', '>', '(', ')', '#', ';', '|', '&', '`', '.', '2', 'a', '--files', ' ', '"', '*', '_', ']'];
+    // Every sequence of up to three of these after `guard verify`: 9,724 lines.
+    const tokens = [' ', '\t', '<', '>', '(', ')', '#', ';', '|', '&', '`', '.', '2', 'a', '--files', '=', '\u{a0}', '"', '*', '_', ']'];
     let tails = [''];
     for (let length = 0; length <= 3; length += 1) {
       if (length > 0) tails = tails.flatMap((tail) => tokens.map((token) => tail + token));
@@ -2228,12 +2230,15 @@ describe('guardProblems', () => {
     const cli = [process.execPath, path];
     const text = [
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md>(cat)',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md<(cat x)',
+      'npx --yes opena2a-cli@latest guard sign<(cat x)',
       'npx --yes opena2a-cli@latest guard verify<(cat x)',
     ].join('\n');
     assert.deepEqual(guardProblems(cli, guardCommands([['a.md', text]]), soul), [
       `${cli.join(' ')} guard sign --files SOUL.md> did not write ${GUARD_STORE}`,
+      `${cli.join(' ')} guard sign --files SOUL.md< did not write ${GUARD_STORE}`,
     ]);
-    assert.equal(readFileSync(log, 'utf8'), 'guard sign --files SOUL.md>\n');
+    assert.equal(readFileSync(log, 'utf8'), 'guard sign --files SOUL.md>\nguard sign --files SOUL.md<\n');
   });
 });
 
@@ -2264,11 +2269,14 @@ describe('this test file', () => {
     }
   });
 
-  test('a comment line that ends inside a sentence is at least half as wide as the widest line of its comment', () => {
-    // A comment is a run of // lines with the same indentation, and a line ends inside a sentence when the
-    // next line of its comment starts with a lowercase letter. A line left short there, as an edit that adds
-    // words to a paragraph can leave one, is reported so that the paragraph is wrapped again.
-    const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
+  // Returns one line for each line of a comment in `lines` that ends inside a sentence and is less than half
+  // as wide as the widest line of its comment. A comment is a run of // lines with the same indentation. A
+  // line ends inside a sentence when the next line of its comment starts with a lowercase letter, or when the
+  // line does not end with a period, colon, question mark or exclamation mark, which closing brackets, quotes
+  // or a backtick may follow, as a line that ends before a name such as GUARD_SIGN_FILES does. A line left
+  // short there, as an edit that adds words to a paragraph can leave one, is reported so that the paragraph
+  // is wrapped again.
+  function shortCommentLines(lines) {
     const comments = [];
     let previous;
     lines.forEach((line, index) => {
@@ -2277,13 +2285,35 @@ describe('this test file', () => {
       else if (indent !== undefined) comments.push([index]);
       previous = indent;
     });
-    const short = comments.flatMap((comment) => {
+    const insideSentence = (index) =>
+      /^[ \t]*\/\/ [a-z]/.test(lines[index + 1]) || !/[.:?!][)\]"'`]*$/.test(lines[index]);
+    return comments.flatMap((comment) => {
       const widest = Math.max(...comment.map((index) => lines[index].length));
       return comment
         .slice(0, -1)
-        .filter((index) => /^[ \t]*\/\/ [a-z]/.test(lines[index + 1]) && lines[index].length * 2 < widest)
+        .filter((index) => insideSentence(index) && lines[index].length * 2 < widest)
         .map((index) => `line ${index + 1} is ${lines[index].length} columns wide; its comment's widest is ${widest}`);
     });
-    assert.deepEqual(short, []);
+  }
+
+  test('reports a short comment line that ends inside a sentence, whatever the next line starts with', () => {
+    const lines = [
+      `// ${'a'.repeat(97)}`,
+      '// as NPX_PINNED and',
+      '// GUARD_SIGN_FILES read',
+      '// it. A sentence.',
+      '// Then a colon:',
+      '// `guard verify`.',
+      '// (A sentence.)',
+      '// The last line',
+    ];
+    assert.deepEqual(shortCommentLines(lines), [
+      "line 2 is 20 columns wide; its comment's widest is 100",
+      "line 3 is 24 columns wide; its comment's widest is 100",
+    ]);
+  });
+
+  test('a comment line that ends inside a sentence is at least half as wide as the widest line of its comment', () => {
+    assert.deepEqual(shortCommentLines(readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/)), []);
   });
 });
