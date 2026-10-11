@@ -1622,7 +1622,8 @@ const GUARD_COMMAND = new RegExp(
 // a process substitution and join the path it opens to the word, as in verify/dev/fd/63. The < or > is
 // kept in its word and the command ends at the (, so the opt-in run passes `verify<`, not `verify`, to
 // opena2a-cli, and a test that looks for a guard verify command does not count it. As in the shell, a #
-// starts a comment only at the start of a word, after a space or a tab, and a # inside a word is part of
+// starts a comment only at the start of a word, after a space, a tab or a character that ends the command,
+// as in `;#x`, and a # inside a word is part of
 // it, as in SOUL.md#x. A number of one or more digits written just before a redirection, with no space or
 // tab between them, as in 2> or 0<, names the file descriptor it opens and is not a word. This follows
 // bash and POSIX sh, which read 10>out that way too; zsh and dash, the /bin/sh of Debian and Ubuntu, read
@@ -1951,6 +1952,19 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       ['guard', 'sign', '--files', 'SOUL.md#x'],
       ['guard', 'sign', '--files#x', 'c.md'],
       ['guard', 'verify#x'],
+    ]);
+  });
+
+  test('ends a guard command at a # that follows a character that ends the command', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files a.md;#x',
+      'npx --yes opena2a-cli@latest guard sign --files b.md|#x',
+      '(npx --yes opena2a-cli@latest guard sign --files c.md)#x',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'sign', '--files', 'a.md'],
+      ['guard', 'sign', '--files', 'b.md'],
+      ['guard', 'sign', '--files', 'c.md'],
     ]);
   });
 
