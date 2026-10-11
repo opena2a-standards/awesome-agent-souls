@@ -1608,27 +1608,32 @@ function unnamedGuardSigns(file, text) {
 }
 
 // A guard sign or guard verify command after `npx --yes opena2a-cli@latest`, and the < or > that ends it, if
-// one does. guardCommands reads it.
+// one does. A < or > followed by ( does not end it and is kept in its word, as NPX_PINNED and
+// GUARD_SIGN_FILES read it. guardCommands reads it.
 const GUARD_COMMAND = new RegExp(
-  String.raw`npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b(?:(?!(?<![ \t.])${SENTENCE_PERIOD.source})(?:[^\`#&;|()<>]|(?<![ \t])#))*)([<>]?)`,
+  String.raw`npx[ \t]+--yes[ \t]+opena2a-cli@latest[ \t]+(guard[ \t]+(?:sign|verify)\b(?:(?!(?<![ \t.])${SENTENCE_PERIOD.source})(?:[^\`#&;|()<>]|(?<![ \t])#|[<>](?=\()))*)((?:[<>](?!\())?)`,
   'g',
 );
 
 // Returns the words after `npx --yes opena2a-cli@latest` in each distinct guard sign and guard verify
 // command in the texts. A command ends at a backtick, a # comment, &, as in && or 2>&1, ;, |, ( or ), as
 // in `(npx --yes opena2a-cli@latest guard verify)`, a redirection (< or >) or the end of its line, which
-// ends at LF or CR LF. As in the shell, a # starts a comment only at the start of a word, after a space
-// or a tab, and a # inside a word is part of it, as in SOUL.md#x. A number of one or more digits written
-// just before a redirection, with no space or tab between them, as in 2> or 0<, names the file
-// descriptor it opens and is not a word. This follows bash and POSIX sh, which read 10>out that way too;
-// zsh and dash, the /bin/sh of Debian and Ubuntu, read only a single digit that way, and read the 10 in
-// 10>out as a word. A SENTENCE_PERIOD at the end of a word also ends the command, as in
-// `Run npx --yes opena2a-cli@latest guard verify.`, so the opt-in run passes `verify`, not `verify.`, to
-// opena2a-cli. A period after a space, a tab or another period starts or continues a word, as in
-// `--files .` or `verify...`, and is kept. Its words are separated by spaces and tabs only, as the shell
-// separates them, so the opt-in run passes `--files`, a no-break space and `SOUL.md` to opena2a-cli as
-// one word, as a shell would. Quotes are not read: `--files "a b.md"` is read as the words `"a` and
-// `b.md"`, so a test checks that no command in the docs quotes a word.
+// ends at LF or CR LF. A < or > followed by ( is not a redirection: bash and zsh read <(...) and >(...) as
+// a process substitution and join the path it opens to the word, as in verify/dev/fd/63. The < or > is
+// kept in its word and the command ends at the (, so the opt-in run passes `verify<`, not `verify`, to
+// opena2a-cli, and a test that looks for a guard verify command does not count it. As in the shell, a #
+// starts a comment only at the start of a word, after a space, a tab or a character that ends the command,
+// as in `;#x`, and a # inside a word is part of
+// it, as in SOUL.md#x. A number of one or more digits written just before a redirection, with no space or
+// tab between them, as in 2> or 0<, names the file descriptor it opens and is not a word. This follows
+// bash and POSIX sh, which read 10>out that way too; zsh and dash, the /bin/sh of Debian and Ubuntu, read
+// only a single digit that way, and read the 10 in 10>out as a word. A SENTENCE_PERIOD at the end of a
+// word also ends the command, as in `Run npx --yes opena2a-cli@latest guard verify.`, so the opt-in run
+// passes `verify`, not `verify.`, to opena2a-cli. A period after a space, a tab or another period starts
+// or continues a word, as in `--files .` or `verify...`, and is kept. Its words are separated by spaces
+// and tabs only, as the shell separates them, so the opt-in run passes `--files`, a no-break space and
+// `SOUL.md` to opena2a-cli as one word, as a shell would. Quotes are not read: `--files "a b.md"` is read
+// as the words `"a` and `b.md"`, so a test checks that no command in the docs quotes a word.
 function guardCommands(texts) {
   const commands = new Map();
   for (const [, text] of texts) {
@@ -1950,6 +1955,19 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     ]);
   });
 
+  test('ends a guard command at a # that follows a character that ends the command', () => {
+    const text = [
+      'npx --yes opena2a-cli@latest guard sign --files a.md;#x',
+      'npx --yes opena2a-cli@latest guard sign --files b.md|#x',
+      '(npx --yes opena2a-cli@latest guard sign --files c.md)#x',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'sign', '--files', 'a.md'],
+      ['guard', 'sign', '--files', 'b.md'],
+      ['guard', 'sign', '--files', 'c.md'],
+    ]);
+  });
+
   test('ends a guard command at ;, |, ( or )', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md; npx --yes opena2a-cli@latest guard verify',
@@ -2026,6 +2044,22 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
       ['guard', 'sign', '--files', 'SOUL.md2'],
       ['guard', 'sign', '--files', '3'],
       ['guard', 'sign', '--files', '4'],
+    ]);
+  });
+
+  test('reads a < or > followed by ( as part of a word, as bash and zsh join the path a process substitution opens to it', () => {
+    // The shell runs `guard verify/dev/fd/63` for the first line, so the opt-in run must not run guard verify.
+    const text = [
+      'npx --yes opena2a-cli@latest guard verify<(cat x)',
+      'npx --yes opena2a-cli@latest guard sign --files SOUL.md>(cat)',
+      'npx --yes opena2a-cli@latest guard sign --files a.md 2<(cat x)',
+      'npx --yes opena2a-cli@latest guard verify <(cat x)',
+    ].join('\n');
+    assert.deepEqual(guardCommands([['a.md', text]]), [
+      ['guard', 'verify<'],
+      ['guard', 'sign', '--files', 'SOUL.md>'],
+      ['guard', 'sign', '--files', 'a.md', '2<'],
+      ['guard', 'verify', '<'],
     ]);
   });
 
