@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import {
+import fs, {
   appendFileSync,
   chmodSync,
   existsSync,
@@ -21,6 +21,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -728,6 +729,20 @@ function withoutReadPermission(paths, check) {
   }
 }
 
+// Runs `check` while readdirSync lists each directory's entries in reverse order, then restores it.
+// syncBuiltinESMExports passes the change on to the modules that import readdirSync by name.
+function withReversedListings(check) {
+  const { readdirSync: list } = fs;
+  fs.readdirSync = (...args) => list(...args).reverse();
+  syncBuiltinESMExports();
+  try {
+    return check();
+  } finally {
+    fs.readdirSync = list;
+    syncBuiltinESMExports();
+  }
+}
+
 describe('checkRepository', () => {
   const roots = [];
   after(() => {
@@ -857,6 +872,26 @@ describe('checkRepository', () => {
       'souls/by-fleet/crew/lead-agent.md: not linked from README.md (link the file, or its fleet directory)',
       'souls/by-use-case/helper.md: not linked from README.md (link the file, or its fleet directory)',
     ]);
+  });
+
+  // The file system chooses the order readdirSync lists a directory's entries in, so the check also runs
+  // with each listing reversed, and both runs report the files in sorted order.
+  test('reports files in sorted order, whatever order the file system lists them in', () => {
+    const files = {
+      'README.md': null,
+      'souls/by-use-case/writer.md': GOOD_USE_CASE,
+      'souls/by-use-case/assistant.md': GOOD_USE_CASE,
+      'souls/by-fleet/alpha/scout-agent.md': GOOD_FLEET_MEMBER.replace('fleet: crew', 'fleet: alpha'),
+    };
+    const expected = [
+      'souls/by-fleet/alpha/scout-agent.md',
+      'souls/by-fleet/crew/lead-agent.md',
+      'souls/by-use-case/assistant.md',
+      'souls/by-use-case/helper.md',
+      'souls/by-use-case/writer.md',
+    ].map((file) => `${file}: not linked from README.md (link the file, or its fleet directory)`);
+    assert.deepEqual(fixture(files), expected);
+    assert.deepEqual(withReversedListings(() => fixture(files)), expected);
   });
 
   test('reports a guide without the requirements table', () => {
