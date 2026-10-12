@@ -3498,36 +3498,47 @@ describe('this test file', () => {
     let lastTick = -1;
     for (const { 0: tick, index } of text.matchAll(/(?<!\\)(?:\\\\)*`/g)) lastTick = index + tick.length - 1;
     // The place of the slash that ends the pattern of a regular expression literal from each place on, read
-    // as code or as the inside of a character class, as LITERAL reads them, or -1 if a line break or the end
-    // of the text comes first. Each place is read once, from the end of the text back, so a slash starts a
-    // regular expression literal only when the slash that ends it lies ahead, and a class that no `]` ends,
-    // or one that holds the slashes after it, is not searched once for each.
+    // as code or as the inside of a character class, as LITERAL reads them, and of the quote that ends a
+    // string in single or double quotes, read as the text of one, or -1 if a line break or the end of the
+    // text comes first. Each place is read once, from the end of the text back, so a slash starts a regular
+    // expression literal, and a quote a string, only when the slash or quote that ends it lies ahead, and a
+    // class that no `]` ends, one that holds the slashes after it, or a quote that none ends, is not
+    // searched once for each.
     const codeEnds = new Int32Array(text.length + 2).fill(-1);
     const classEnds = new Int32Array(text.length + 2).fill(-1);
+    const singleEnds = new Int32Array(text.length + 2).fill(-1);
+    const doubleEnds = new Int32Array(text.length + 2).fill(-1);
     for (let at = text.length - 1; at >= 0; at -= 1) {
       // A backslash escapes the character after it, unless that character ends a line, as `.` does not
       // match one.
       if (text[at] === '\\' && /./.test(text.charAt(at + 1))) {
         codeEnds[at] = codeEnds[at + 2];
         classEnds[at] = classEnds[at + 2];
+        singleEnds[at] = singleEnds[at + 2];
+        doubleEnds[at] = doubleEnds[at + 2];
       } else if (text[at] !== '\\' && text[at] !== '\n') {
         codeEnds[at] = text[at] === '/' ? at : text[at] === '[' ? classEnds[at + 1] : codeEnds[at + 1];
         classEnds[at] = text[at] === ']' ? codeEnds[at + 1] : classEnds[at + 1];
+        singleEnds[at] = text[at] === "'" ? at : singleEnds[at + 1];
+        doubleEnds[at] = text[at] === '"' ? at : doubleEnds[at + 1];
       }
     }
     for (let at = 0; at < text.length; ) {
       const comment = text.startsWith('/*', at) && at + 2 <= lastEnd;
       const unended = text[at] === '`' && at >= lastTick;
-      // A slash that starts no line comment is code when no regular expression literal ends after it, or
-      // when the code before it ends with a name, a number or a closing bracket and no `*` comes next.
+      // A slash that starts no comment is code when no regular expression literal ends after it, or when
+      // the code before it ends with a name, a number or a closing bracket and no `*` comes next.
       const divides =
         text[at] === '/' &&
         text[at + 1] !== '/' &&
         (codeEnds[at + 1] === -1 || (text[at + 1] !== '*' && /[\w$)\]]/.test(last)));
+      // A quote that no quote ends on its line is code.
+      const unquoted =
+        (text[at] === "'" && singleEnds[at + 1] === -1) || (text[at] === '"' && doubleEnds[at + 1] === -1);
       LITERAL.lastIndex = at;
       const [literal] = comment
         ? [text.slice(at, text.indexOf('*/', at + 2) + 2)]
-        : unended || divides
+        : unended || divides || unquoted
           ? []
           : (LITERAL.exec(text) ?? []);
       if (literal === undefined) {
@@ -3810,50 +3821,92 @@ describe('this test file', () => {
     return found;
   }
 
-  // Returns, for each line of `codes`, the code of the lines of a file, the parameters of each function
-  // whose body is a block that the line opens, as `(ratio) => {` does, and as `function scale(ratio) {`
-  // and the method `scale(ratio) {` do where holdsParameters reads them, and the parameters of each whose
-  // block it closes. The lines of the block after the line that opens it take them as the function sets
-  // them, and not as time ratios that a line before the function sets.
+  // Returns, for each line of `codes`, the code of the lines of a file, the names that each block the line
+  // opens binds, and the names that each block it closes binds. A block binds the parameters of the
+  // function whose body it is, as `(ratio) => {` does, and as `function scale(ratio) {` and the method
+  // `scale(ratio) {` do where holdsParameters reads them, the names that `const`, `let` or `var` declares in
+  // the head of the `for` loop whose body it is and the name that the `catch` clause whose body it is gives
+  // the error. Each of those is a name in the list in round brackets before the block, or in an array or
+  // object that destructures in it, and not a key or a name in a default value. The lines of the block
+  // after the line that opens it take those names as the block binds them, and not as time ratios that a
+  // line before the block sets.
   function blockParameters(codes) {
     const opens = codes.map(() => []);
     const closes = codes.map(() => []);
-    // Each token read and where it starts in the code, the index in the tokens of the opening bracket of
-    // each closing bracket read, and each bracket open, with its index and the parameters of the function
-    // whose body it is, if any.
+    // Each token read and where it starts in the code, and, at the index in the tokens of each closing
+    // bracket read, the index of its opening bracket and the names that the list in round brackets that it
+    // closes would bind.
     const code = codes.join('\n');
     const tokens = [];
     const places = [];
     const opening = [];
+    const lists = [];
+    // Each bracket open, with its index. Only the `=>` or the block after a list in round brackets shows
+    // whether it binds names, so the names that it would bind are read for each one, and a square or curly
+    // bracket where a name is bound destructures, adding the names in it to those of its list. `state` is
+    // `bind` where a name is bound, `value` in a default value, which runs on to the next comma, `head` at
+    // the start of the head of a `for` loop, before `const`, `let` or `var`, and `off` where no name is
+    // bound. `key` is true in a curly bracket that destructures where a name may be a key, which a colon
+    // follows, and `name` holds the name read last where a name is bound, until the token after it shows
+    // whether it is a key.
     const brackets = [];
     let line = 0;
-    for (const { 0: token, index: place } of code.matchAll(/[\w$]+|=>|[()[\]{}\n]/g)) {
+    for (const { 0: token, index: place } of code.matchAll(/[\w$]+|=>|[=,:;()[\]{}\n]/g)) {
       if (token === '\n') {
         line += 1;
         continue;
       }
       const last = tokens.length - 1;
+      const frame = brackets.at(-1);
+      // The name read last is bound unless a colon after it shows it to be a key.
+      if (frame?.name !== undefined && token !== ':') frame.names.push(frame.name);
+      if (frame !== undefined) frame.name = undefined;
       if (/^[([{]$/.test(token)) {
-        let list = [];
+        let parameters;
         const before = opening[last];
         if (token === '{' && tokens[last] === '=>') {
-          const first = tokens[last - 1] === ')' ? opening[last - 1] : last - 1;
-          list = first === undefined ? [] : tokens.slice(first, last);
+          parameters = tokens[last - 1] === ')' ? (lists[last - 1] ?? []) : [tokens[last - 1] ?? ''];
         } else if (
           token === '{' &&
           tokens[last] === ')' &&
           before !== undefined &&
-          holdsParameters(code, tokens, places, before, last)
+          (holdsParameters(code, tokens, places, before, last) ||
+            [tokens[before - 1], tokens[before - 2]].some((word) => /^(?:function|for|catch)$/.test(word ?? '')))
         ) {
-          list = tokens.slice(before, last);
+          parameters = lists[last] ?? [];
         }
-        const parameters = list.filter((word) => /^[A-Za-z_$]/.test(word));
-        opens[line].push(...parameters);
-        brackets.push({ index: tokens.length, parameters });
-      } else if (/^[)\]}]$/.test(token) && brackets.length > 0) {
-        const { index, parameters } = brackets.pop();
-        opening[tokens.length] = index;
-        closes[line].push(...parameters);
+        parameters = parameters?.filter((word) => /^[A-Za-z_$]/.test(word));
+        if (parameters !== undefined) opens[line].push(...parameters);
+        const index = tokens.length;
+        if (token === '(') {
+          const head = tokens[last] === 'for' || (tokens[last] === 'await' && tokens[last - 1] === 'for');
+          brackets.push({ index, names: [], state: head ? 'head' : 'bind', head });
+        } else if (parameters === undefined && frame?.state === 'bind' && frame.key !== true) {
+          brackets.push({ index, names: frame.names, state: 'bind', key: token === '{' ? true : undefined });
+        } else {
+          brackets.push({ index, state: 'off', parameters });
+        }
+      } else if (/^[)\]}]$/.test(token)) {
+        if (brackets.length > 0) {
+          const { index, names, parameters } = brackets.pop();
+          opening[tokens.length] = index;
+          lists[tokens.length] = names;
+          if (parameters !== undefined) closes[line].push(...parameters);
+        }
+      } else if (frame?.state === 'head') {
+        frame.state = /^(?:const|let|var)$/.test(token) ? 'bind' : 'off';
+      } else if (frame?.state === 'bind' && /^[\w$]/.test(token)) {
+        if (frame.head && /^(?:of|in)$/.test(token)) frame.state = 'off';
+        else if (/^[A-Za-z_$]/.test(token)) frame.name = token;
+      } else if (token === ':' && frame?.state === 'bind' && frame.key === true) {
+        frame.key = false;
+      } else if (token === '=' && frame?.state === 'bind') {
+        frame.state = 'value';
+      } else if (token === ',' && frame !== undefined) {
+        if (frame.state === 'value') frame.state = 'bind';
+        if (frame.key === false) frame.key = true;
+      } else if (token === ';' && frame !== undefined) {
+        frame.state = 'off';
       }
       tokens.push(token);
       places.push(place);
@@ -3867,8 +3920,8 @@ describe('this test file', () => {
   // does. What a line sets runs on to the end of its statement. A destructuring set sets each of its names
   // to its default value, if any, and what it sets, and a compound assignment sets its name to the name and
   // what it sets with the sign between them. The time ratios that a value can take, and the names of
-  // timeRatio that it can call, are those that the lines before it set, other than the parameters of each
-  // function whose block the line lies in.
+  // timeRatio that it can call, are those that the lines before it set, other than the names that each
+  // block the line lies in binds, as blockParameters reads them.
   function timeRatioLines(codes) {
     const ratios = [];
     const names = new Set();
@@ -3890,7 +3943,7 @@ describe('this test file', () => {
       if (/\S/.test(codes[at])) next = at;
     }
     const { opens, closes } = blockParameters(codes);
-    // How many functions whose block the line read lies in have each name as a parameter.
+    // How many blocks that the line read lies in bind each name.
     const parameters = new Map();
     const count = (list, by) => list.forEach((name) => parameters.set(name, (parameters.get(name) ?? 0) + by));
     codes.forEach((_, index) => {
@@ -4362,6 +4415,9 @@ describe('this test file', () => {
     assert.equal(codeOf('/*/ a */ b'), '         b');
     // The last block comment of a text, empty, is not read as a regular expression with the letters after it.
     assert.equal(codeOf('a /**/x'), 'a     x');
+    // A `/*` that no `*/` follows starts a regular expression literal that a slash after it on its line
+    // ends, after a name too, as a slash that divides has no `*` after it.
+    assert.equal(codeOf('a /* b /'), `a${' '.repeat(7)}`);
   });
 
   test('reads a template literal up to a backtick that an even number of backslashes comes before, over a line break', () => {
@@ -4671,6 +4727,41 @@ describe('this test file', () => {
     ]);
   });
 
+  test('reads a name that a for loop declares or a catch clause binds as its block binds it, and no key or default value', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    for (const factor of sizes) {',
+      '      const each = factor;',
+      '    }',
+      '    for (const [size, { factor }] of rows) {',
+      '      const row = factor;',
+      '    }',
+      '    try {',
+      '      check();',
+      '    } catch (factor) {',
+      '      const message = factor;',
+      '    }',
+      '    for (const size of sizes) {',
+      '      const scaled = factor;',
+      '    }',
+      '    const read = ({ factor: size }) => {',
+      '      const half = factor;',
+      '    };',
+      '    function grow(size = factor) {',
+      '      const double = factor;',
+      '    }',
+      '    const pick = ({ factor: { factor } }) => {',
+      '      const inner = factor;',
+      '    };',
+    ];
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    assert.deepEqual(ownTimeRatios(lines), [
+      `line 14 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 17 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 20 sets a time ratio that is not a call of timeRatio; ${takes}`,
+    ]);
+  });
+
   test('reads a statement with no semicolon as ending before a line that starts another, after any comment line', () => {
     const lines = [
       '    const ratio = timeRatio(check, 32_000)',
@@ -4702,6 +4793,23 @@ describe('this test file', () => {
     };
     const ratio = timeRatio(read, 64_000);
     assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the length took ${ratio.toFixed(2)} times as long`);
+  });
+
+  test('reads the code of a long line of quotes that a backslash comes before in linear time', () => {
+    // Returns a function that takes the time to read the code of a line of the given number of `quote`s,
+    // each with a backslash before it. Searching to the end of the line for the end of a string at each
+    // quote, when no quote that ends one follows it, took time that grew with the square of the number of
+    // quotes.
+    const timer = (quote) => (count) => {
+      const line = `\\${quote}`.repeat(count);
+      const start = performance.now();
+      assert.equal(codeOf(line), line);
+      return performance.now() - start;
+    };
+    for (const quote of ["'", '"']) {
+      const ratio = timeRatio(timer(quote), 8_000);
+      assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the quotes took ${ratio.toFixed(2)} times as long`);
+    }
   });
 
   test('reads a call of timeRatio in many brackets in linear time', () => {
@@ -4782,6 +4890,27 @@ describe('this test file', () => {
     }
   });
 
+  test('checks functions whose parameter lists lie one inside another, and whose bodies are blocks, in linear time', () => {
+    // Returns a function that takes the time to check a call of the given number of functions that `make`
+    // makes, each in the parameter list of the one around it and with a block for its body. Reading each
+    // parameter list again for every list around it took time that grew with the square of the number of
+    // functions.
+    const timer = (make) => (count) => {
+      const lines = [`    run(${make(count)});`];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    const makers = [
+      (count) => `${'function ('.repeat(count)}${') {}'.repeat(count)}`,
+      (count) => `${'(a = '.repeat(count)}1${') => {}'.repeat(count)}`,
+    ];
+    for (const make of makers) {
+      const ratio = timeRatio(timer(make), 4_000);
+      assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the functions took ${ratio.toFixed(2)} times as long`);
+    }
+  });
+
   test('checks many lines that each start a block comment that nothing ends in linear time', () => {
     // Returns the time taken to check the given number of lines, each with a `/*` that no `*/` follows.
     // Searching to the end of the file for the end of each comment took time that grew with the square of
@@ -4814,20 +4943,23 @@ describe('this test file', () => {
   });
 
   test('checks a long line of slashes that start no regular expression literal, or that divide, in linear time', () => {
-    // Returns a function that takes the time to check the line that `make` makes with the given number of
+    // Returns a function that takes the time to check the lines that `make` makes with the given number of
     // slashes. Searching to the end of the line for the end of a regular expression literal at each slash,
     // when a character class that no `]` ends, or one that a slash does not follow, holds the slashes after
-    // it, or when the slash divides, took time that grew with the square of the number of slashes.
+    // it, or when the slash divides, took time that grew with the square of the number of slashes. A `]`
+    // and a slash on the next line end no such class, after a line break alone or a backslash before it.
     const timer = (make) => (count) => {
-      const lines = [make(count)];
+      const lines = make(count);
       const start = performance.now();
       assert.deepEqual(ownTimeRatios(lines), []);
       return performance.now() - start;
     };
     const makers = [
-      (count) => '/[ '.repeat(count),
-      (count) => `${'/[ '.repeat(count)}]`,
-      (count) => `x${'/[a'.repeat(count)}]/`,
+      (count) => ['/[ '.repeat(count)],
+      (count) => [`${'/[ '.repeat(count)}]`],
+      (count) => [`x${'/[a'.repeat(count)}]/`],
+      (count) => ['(/['.repeat(count), ']/'],
+      (count) => [`${'(/['.repeat(count)}\\`, ']/'],
     ];
     for (const make of makers) {
       const ratio = timeRatio(timer(make), 8_000);
