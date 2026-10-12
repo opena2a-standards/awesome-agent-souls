@@ -3871,7 +3871,7 @@ describe('this test file', () => {
           tokens[last] === ')' &&
           before !== undefined &&
           (holdsParameters(code, tokens, places, before, last) ||
-            [tokens[before - 1], tokens[before - 2]].some((word) => /^(?:function|for|catch)$/.test(word ?? '')))
+            [tokens[before - 1], tokens[before - 2]].some((word) => /^(?:for|catch)$/.test(word ?? '')))
         ) {
           parameters = lists[last] ?? [];
         }
