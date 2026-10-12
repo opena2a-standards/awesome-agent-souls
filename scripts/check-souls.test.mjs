@@ -4753,12 +4753,31 @@ describe('this test file', () => {
       '    const pick = ({ factor: { factor } }) => {',
       '      const inner = factor;',
       '    };',
+      // A for head with no declaration binds nothing.
+      '    for (factor of sizes) {',
+      '      const loose = factor;',
+      '    }',
+      // A computed key is not bound, first or after another member.
+      '    const keyed = ({ [factor]: size }) => {',
+      '      const computed = factor;',
+      '    };',
+      '    const later = ({ a: x, [factor]: y }) => {',
+      '      const second = factor;',
+      '    };',
+      // A for head binds nothing after its first semicolon.
+      '    for (let i; factor > i; i += 1) {',
+      '      const step = factor;',
+      '    }',
     ];
     const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
     assert.deepEqual(ownTimeRatios(lines), [
       `line 14 sets a time ratio that is not a call of timeRatio; ${takes}`,
       `line 17 sets a time ratio that is not a call of timeRatio; ${takes}`,
       `line 20 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 26 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 29 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 32 sets a time ratio that is not a call of timeRatio; ${takes}`,
+      `line 35 sets a time ratio that is not a call of timeRatio; ${takes}`,
     ]);
   });
 
