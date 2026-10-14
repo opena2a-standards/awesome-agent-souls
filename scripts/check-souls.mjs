@@ -7,7 +7,7 @@
 // kind of file lives, which frontmatter fields it carries and which `##`
 // sections it contains. Changing the rules means editing that table.
 //
-// It also checks README.md: every soul is linked, and every template has a
+// It also checks docs/catalog.md: every soul is linked, and every template has a
 // table row whose last cell lists the template's `##` sections in file order.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -15,7 +15,9 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const GUIDE = 'CONTRIBUTING.md';
-const README = 'README.md';
+export const CATALOG = 'docs/catalog.md';
+// The catalog sits in docs/, so it links a file by its path from the repository root after `../`.
+const FROM_CATALOG = '../';
 const SCANNED_DIRS = ['souls', 'templates'];
 const LINKED_DIR = 'souls';
 const TEMPLATE_DIR = 'templates';
@@ -270,14 +272,14 @@ export function checkRepository(root, name = root) {
     if (!rule.pattern) problems.push(`${GUIDE}: table row ${index + 1} (${rule.dimension}) has no location`);
   });
 
-  // A README.md that cannot be read is reported once, and its links and rows are not checked.
-  let readme = '';
+  // A catalog that cannot be read is reported once, and its links and rows are not checked.
+  let catalog = '';
   try {
-    readme = readFileSync(join(root, README), 'utf8');
+    catalog = readFileSync(join(root, CATALOG), 'utf8');
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      problems.push(cannotRead(README, error));
-      readme = null;
+      problems.push(cannotRead(CATALOG, error));
+      catalog = null;
     }
   }
   const unreadable = [];
@@ -333,29 +335,29 @@ export function checkRepository(root, name = root) {
       }
     }
 
-    if (readme === null) continue;
+    if (catalog === null) continue;
 
     if (file.startsWith(`${LINKED_DIR}/`)) {
       const directory = `${file.slice(0, file.lastIndexOf('/'))}/`;
-      if (!readme.includes(`](${file})`) && !readme.includes(`](${directory})`)) {
-        problems.push(`${file}: not linked from ${README} (link the file, or its fleet directory)`);
+      if (!catalog.includes(`](${FROM_CATALOG}${file})`) && !catalog.includes(`](${FROM_CATALOG}${directory})`)) {
+        problems.push(`${file}: not linked from ${CATALOG} (link the file, or its fleet directory)`);
       }
     }
 
     if (file.startsWith(`${TEMPLATE_DIR}/`)) {
-      const rows = readme
+      const rows = catalog
         .split(/\r?\n/)
-        .filter((line) => line.trim().startsWith('|') && line.includes(`](${file})`));
+        .filter((line) => line.trim().startsWith('|') && line.includes(`](${FROM_CATALOG}${file})`));
       if (rows.length === 0) {
         problems.push(
-          `${file}: no ${README} table row links it (add a row to the Templates table that lists its sections)`,
+          `${file}: no ${CATALOG} table row links it (add a row to the Templates table that lists its sections)`,
         );
       }
       for (const row of rows) {
         const listed = backticked(splitRow(row).at(-1));
         if (listed.join('\n') !== headings.join('\n')) {
           problems.push(
-            `${file}: ${README} lists sections ${listed.join(', ') || '(none)'}; ` +
+            `${file}: ${CATALOG} lists sections ${listed.join(', ') || '(none)'}; ` +
               `the file has ${headings.join(', ') || '(none)'}`,
           );
         }
@@ -378,8 +380,8 @@ const USAGE = 'Usage: node scripts/check-souls.mjs [--root <dir>]';
 const HELP = `${USAGE}
 
 Checks every .md file under souls/ and templates/ against the requirements
-table in ${GUIDE}, and checks that ${README} links every soul and lists
-every template's sections. Prints one line per problem.
+table in ${GUIDE}, and checks that ${CATALOG} links every
+soul and lists every template's sections. Prints one line per problem.
 
 Options:
   --root <dir>  Repository directory to check (default: the repository

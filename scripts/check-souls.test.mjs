@@ -3,8 +3,8 @@
 // run hackmyagent scan-soul on every template and the guide's Minimal Template. The command's words are
 // separated by spaces; quote a word that contains spaces, or set HACKMYAGENT to the scanner's path alone.
 // Set OPENA2A_CLI to an opena2a-cli command, for example OPENA2A_CLI='npx --yes opena2a-cli@latest', to also
-// run the guard sign and guard verify commands in README.md, CONTRIBUTING.md and the guides. Its words are
-// read the same way.
+// run the guard sign and guard verify commands in README.md, CONTRIBUTING.md, the docs pages and the guides.
+// Its words are read the same way.
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -28,7 +28,7 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { checkRepository as checkProse } from './check-docs-prose.mjs';
-import { checkRepository, main, readRules, readSections } from './check-souls.mjs';
+import { CATALOG, checkRepository, main, readRules, readSections } from './check-souls.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -104,7 +104,7 @@ function templateSouls() {
   return [...templates, ['the Minimal Template in the guide', minimal]];
 }
 
-// The README.md tables whose last column names the standards and regulations each soul covers.
+// The docs/catalog.md tables whose last column names the standards and regulations each soul covers.
 const STANDARDS_TABLES = ['By Industry', 'By Organization Type'];
 
 // A word that marks a standard or regulation name: it contains a digit or two capital letters, such as
@@ -143,7 +143,7 @@ const CELL_START = /\bso | and /g;
 // may also end at ` and `. The text is split into clauses and each clause is read once, so the time taken
 // grows with the length of the text, however often a clause repeats the words of an example.
 function standardsExamples(guide) {
-  const start = guide.indexOf("If you change a row of the README's By Industry");
+  const start = guide.indexOf("If you change a row of the catalog's By Industry");
   assert.ok(start >= 0, 'CONTRIBUTING.md: the description of the standards test was not found');
   const end = guide.indexOf('If you change', start + 1);
   const text = guide.slice(start, end < 0 ? undefined : end);
@@ -204,10 +204,10 @@ function readExamples(clause, ended, afterComma) {
   return examples;
 }
 
-// Reads the last column of each row in a README.md table under a STANDARDS_TABLES heading, and returns
-// one problem for each name `standardNames` reads from it that the soul the row links to does not
-// mention, and the number of names read. The soul may break a name of several words across lines.
-// `readSoul` returns the text of a file the README links to.
+// Reads the last column of each row in a docs/catalog.md table under a STANDARDS_TABLES heading, and
+// returns one problem for each name `standardNames` reads from it that the soul the row links to does
+// not mention, and the number of names read. The soul may break a name of several words across lines.
+// `readSoul` returns the text of a file the catalog links to.
 function unmentionedStandards(readme, readSoul) {
   const problems = [];
   let names = 0;
@@ -226,24 +226,24 @@ function unmentionedStandards(readme, readSoul) {
       names += 1;
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '\\s+');
       if (!new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i').test(soul)) {
-        problems.push(`${link[1]}: the README.md ${table} table names ${name}, which the soul does not mention`);
+        problems.push(`${link[1]}: the ${CATALOG} ${table} table names ${name}, which the soul does not mention`);
       }
     }
   }
   return { problems, names };
 }
 
-// Reads the table in the By Use Case section of a README and returns, for each row, the file its first
+// Reads the table in the By Use Case section of a catalog and returns, for each row, the file its first
 // cell links and the comma-separated names in its Popular Platforms cell.
 function useCasePlatforms(readme) {
   const section = readme.split(/^## /m).find((part) => part.startsWith('By Use Case'));
-  assert.ok(section !== undefined, 'README.md: By Use Case section not found');
+  assert.ok(section !== undefined, `${CATALOG}: By Use Case section not found`);
   const rows = section
     .split(/\r?\n/)
     .filter((line) => line.startsWith('|'))
     .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()));
   const column = rows[0]?.indexOf('Popular Platforms') ?? -1;
-  assert.ok(column >= 0, 'README.md: the By Use Case table has no Popular Platforms column');
+  assert.ok(column >= 0, `${CATALOG}: the By Use Case table has no Popular Platforms column`);
   return rows.slice(2).map((cells) => ({
     file: cells[0].match(/\]\(([^)]+)\)/)?.[1],
     platforms: cells[column].split(',').map((name) => name.trim()).filter(Boolean),
@@ -491,11 +491,13 @@ describe('this repository', () => {
     },
   );
 
-  test('every soul mentions each standard and regulation its README.md table row names', () => {
-    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
-    const { problems, names } = unmentionedStandards(readme, (path) => readFileSync(join(repoRoot, path), 'utf8'));
+  test('every soul mentions each standard and regulation its docs/catalog.md table row names', () => {
+    const catalog = readFileSync(join(repoRoot, CATALOG), 'utf8');
+    const { problems, names } = unmentionedStandards(catalog, (path) =>
+      readFileSync(join(repoRoot, dirname(CATALOG), path), 'utf8'),
+    );
     assert.deepEqual(problems, []);
-    assert.ok(names > 0, 'no standard or regulation names were read from the README.md tables');
+    assert.ok(names > 0, `no standard or regulation names were read from the ${CATALOG} tables`);
   });
 
   test('CONTRIBUTING.md says the standards test checks only the names it reads, and how it reads them', () => {
@@ -548,15 +550,15 @@ describe('this repository', () => {
     }
   });
 
-  test('every By Use Case soul names each platform its README row lists under Popular Platforms', () => {
-    const rows = useCasePlatforms(readFileSync(join(repoRoot, 'README.md'), 'utf8'));
-    assert.ok(rows.length > 0, 'README.md: the By Use Case table has no rows');
+  test('every By Use Case soul names each platform its catalog row lists under Popular Platforms', () => {
+    const rows = useCasePlatforms(readFileSync(join(repoRoot, CATALOG), 'utf8'));
+    assert.ok(rows.length > 0, `${CATALOG}: the By Use Case table has no rows`);
     const problems = [];
     for (const { file, platforms } of rows) {
-      assert.ok(file, 'README.md: a By Use Case row does not link its soul');
-      assert.ok(platforms.length > 0, `README.md: the By Use Case row for ${file} lists no platforms`);
-      for (const name of missingPlatforms(readFileSync(join(repoRoot, file), 'utf8'), platforms)) {
-        problems.push(`${file}: does not mention ${name}, which README.md lists under Popular Platforms`);
+      assert.ok(file, `${CATALOG}: a By Use Case row does not link its soul`);
+      assert.ok(platforms.length > 0, `${CATALOG}: the By Use Case row for ${file} lists no platforms`);
+      for (const name of missingPlatforms(readFileSync(join(repoRoot, dirname(CATALOG), file), 'utf8'), platforms)) {
+        problems.push(`${file}: does not mention ${name}, which ${CATALOG} lists under Popular Platforms`);
       }
     }
     assert.deepEqual(problems, []);
@@ -621,8 +623,8 @@ describe('unmentionedStandards', () => {
   test('reports each name the linked soul does not mention, and none from a table it does not read', () => {
     assert.deepEqual(unmentionedStandards(readme, (path) => souls[path]), {
       problems: [
-        'souls/fintech.md: the README.md By Industry table names GLBA, which the soul does not mention',
-        'souls/plant.md: the README.md By Industry table names IEC 62443, which the soul does not mention',
+        'souls/fintech.md: the docs/catalog.md By Industry table names GLBA, which the soul does not mention',
+        'souls/plant.md: the docs/catalog.md By Industry table names IEC 62443, which the soul does not mention',
       ],
       names: 6,
     });
@@ -653,8 +655,8 @@ describe('unmentionedStandards', () => {
     };
     assert.deepEqual(unmentionedStandards(regulations, (path) => pieces[path]), {
       problems: [
-        'souls/health.md: the README.md By Industry table names FDA 21 CFR Part 11, which the soul does not mention',
-        'souls/gov.md: the README.md By Organization Type table names Section 508, which the soul does not mention',
+        'souls/health.md: the docs/catalog.md By Industry table names FDA 21 CFR Part 11, which the soul does not mention',
+        'souls/gov.md: the docs/catalog.md By Organization Type table names Section 508, which the soul does not mention',
       ],
       names: 5,
     });
@@ -728,7 +730,7 @@ function timeRatio(time, size) {
 describe('standardsExamples', () => {
   test('reads each example of a name read whole, read as another name, or not checked', () => {
     const guide = [
-      "Intro. If you change a row of the README's By Industry table, run `node --test scripts/check-souls.test.mjs`;",
+      "Intro. If you change a row of the catalog's By Industry table, run `node --test scripts/check-souls.test.mjs`;",
       "it checks names. Commas and slashes split that column; a name is read when, so HL7 FHIR is read whole,",
       'WCAG 2.1 AA is read whole, OSHA reporting requirements is read as OSHA and ABA Model Rules is read as ABA.',
       'When it is a number, the word before it is read too, so Section 508 is read as Section 508, not 508.',
@@ -749,7 +751,7 @@ describe('standardsExamples', () => {
   // Returns the time taken to read the examples in a description of the given number of repeats of `words`,
   // with no comma, semicolon or period, so no example ends and none is read.
   const read = (words, repeats) => {
-    const guide = `If you change a row of the README's By Industry table ${words.repeat(repeats)}`;
+    const guide = `If you change a row of the catalog's By Industry table ${words.repeat(repeats)}`;
     const start = performance.now();
     assert.deepEqual(standardsExamples(guide).examples, []);
     return performance.now() - start;
@@ -975,7 +977,8 @@ fleet: crew
 ## Constraints
 `;
 
-const BASE_README = '[helper](souls/by-use-case/helper.md)\n[crew](souls/by-fleet/crew/)\n';
+// The catalog sits in docs/, so its links start with ../ as the catalog in this repository does.
+const BASE_CATALOG = '[helper](../souls/by-use-case/helper.md)\n[crew](../souls/by-fleet/crew/)\n';
 
 const GUIDE_WITH_TEMPLATE = `${GUIDE}| Template | \`templates/<name>.md\` | \`name\` | \`Identity\`, \`Harm Avoidance\` |
 `;
@@ -991,7 +994,7 @@ name: basic-template
 ## Harm Avoidance
 `;
 
-const TEMPLATE_ROW = '| [basic](templates/basic.md) | Answers questions | `Identity`, `Workflow`, `Harm Avoidance` |\n';
+const TEMPLATE_ROW = '| [basic](../templates/basic.md) | Answers questions | `Identity`, `Workflow`, `Harm Avoidance` |\n';
 
 // Tests that take away read permission are skipped where taking it away does not stop a read.
 const CANNOT_DENY_READ =
@@ -1038,7 +1041,7 @@ describe('checkRepository', () => {
     roots.push(root);
     const all = {
       'CONTRIBUTING.md': GUIDE,
-      'README.md': BASE_README,
+      [CATALOG]: BASE_CATALOG,
       'souls/by-use-case/helper.md': GOOD_USE_CASE,
       'souls/by-fleet/crew/lead-agent.md': GOOD_FLEET_MEMBER,
       ...files,
@@ -1145,15 +1148,15 @@ describe('checkRepository', () => {
     ]);
   });
 
-  test('reports a README.md that cannot be read once, without a problem for each link', { skip: CANNOT_DENY_READ }, () => {
-    const problems = fixture({ 'souls/by-use-case/second.md': GOOD_USE_CASE }, { unreadable: ['README.md'] });
-    assert.deepEqual(problems, ['README.md: cannot read: permission denied (EACCES)']);
+  test('reports a catalog that cannot be read once, without a problem for each link', { skip: CANNOT_DENY_READ }, () => {
+    const problems = fixture({ 'souls/by-use-case/second.md': GOOD_USE_CASE }, { unreadable: [CATALOG] });
+    assert.deepEqual(problems, ['docs/catalog.md: cannot read: permission denied (EACCES)']);
   });
 
-  test('reads a README.md that does not exist as empty, so each soul is reported as not linked', () => {
-    assert.deepEqual(fixture({ 'README.md': null }), [
-      'souls/by-fleet/crew/lead-agent.md: not linked from README.md (link the file, or its fleet directory)',
-      'souls/by-use-case/helper.md: not linked from README.md (link the file, or its fleet directory)',
+  test('reads a catalog that does not exist as empty, so each soul is reported as not linked', () => {
+    assert.deepEqual(fixture({ [CATALOG]: null }), [
+      'souls/by-fleet/crew/lead-agent.md: not linked from docs/catalog.md (link the file, or its fleet directory)',
+      'souls/by-use-case/helper.md: not linked from docs/catalog.md (link the file, or its fleet directory)',
     ]);
   });
 
@@ -1161,7 +1164,7 @@ describe('checkRepository', () => {
   // with each listing reversed, and both runs report the files in sorted order.
   test('reports files in sorted order, whatever order the file system lists them in', () => {
     const files = {
-      'README.md': null,
+      [CATALOG]: null,
       'souls/by-use-case/writer.md': GOOD_USE_CASE,
       'souls/by-use-case/assistant.md': GOOD_USE_CASE,
       'souls/by-fleet/alpha/scout-agent.md': GOOD_FLEET_MEMBER.replace('fleet: crew', 'fleet: alpha'),
@@ -1172,7 +1175,7 @@ describe('checkRepository', () => {
       'souls/by-use-case/assistant.md',
       'souls/by-use-case/helper.md',
       'souls/by-use-case/writer.md',
-    ].map((file) => `${file}: not linked from README.md (link the file, or its fleet directory)`);
+    ].map((file) => `${file}: not linked from docs/catalog.md (link the file, or its fleet directory)`);
     assert.deepEqual(fixture(files), expected);
     assert.deepEqual(withReversedListings(() => fixture(files)), expected);
   });
@@ -1299,10 +1302,10 @@ describe('checkRepository', () => {
     assert.deepEqual(problems, ['souls/helper/SOUL.md: not at any location listed in CONTRIBUTING.md']);
   });
 
-  test('reports a soul the README does not link', () => {
+  test('reports a soul the catalog does not link', () => {
     const problems = fixture({ 'souls/by-use-case/second.md': GOOD_USE_CASE });
     assert.deepEqual(problems, [
-      'souls/by-use-case/second.md: not linked from README.md (link the file, or its fleet directory)',
+      'souls/by-use-case/second.md: not linked from docs/catalog.md (link the file, or its fleet directory)',
     ]);
   });
 
@@ -1323,7 +1326,7 @@ describe('checkRepository', () => {
     return fixture(
       {
         'CONTRIBUTING.md': `${TABLE_HEADER}| Odd | ${ADJACENT} | \`name\` | \`Identity\` |\n`,
-        'README.md': '',
+        [CATALOG]: '',
         'souls/by-use-case/helper.md': null,
         'souls/by-fleet/crew/lead-agent.md': null,
         [`${LONG_DIR}/x.md`]: '---\nname: x\n---\n\n## Identity\n',
@@ -1358,39 +1361,39 @@ describe('checkRepository', () => {
     },
   );
 
-  function templateFixture({ readme = BASE_README + TEMPLATE_ROW, template = GOOD_TEMPLATE } = {}) {
+  function templateFixture({ catalog = BASE_CATALOG + TEMPLATE_ROW, template = GOOD_TEMPLATE } = {}) {
     return fixture({
       'CONTRIBUTING.md': GUIDE_WITH_TEMPLATE,
-      'README.md': readme,
+      [CATALOG]: catalog,
       'templates/basic.md': template,
     });
   }
 
-  test('accepts a template whose README row lists its sections in file order', () => {
+  test('accepts a template whose catalog row lists its sections in file order', () => {
     assert.deepEqual(templateFixture(), []);
   });
 
-  test('reports a template that no README table row links', () => {
+  test('reports a template that no catalog table row links', () => {
     const expected = [
-      'templates/basic.md: no README.md table row links it (add a row to the Templates table that lists its sections)',
+      'templates/basic.md: no docs/catalog.md table row links it (add a row to the Templates table that lists its sections)',
     ];
-    assert.deepEqual(templateFixture({ readme: BASE_README }), expected);
-    assert.deepEqual(templateFixture({ readme: `${BASE_README}See [basic](templates/basic.md).\n` }), expected);
-    assert.deepEqual(templateFixture({ readme: `${BASE_README}| [all](templates/) | Templates | \`Identity\` |\n` }), expected);
+    assert.deepEqual(templateFixture({ catalog: BASE_CATALOG }), expected);
+    assert.deepEqual(templateFixture({ catalog: `${BASE_CATALOG}See [basic](../templates/basic.md).\n` }), expected);
+    assert.deepEqual(templateFixture({ catalog: `${BASE_CATALOG}| [all](../templates/) | Templates | \`Identity\` |\n` }), expected);
   });
 
-  test('reports a README row whose sections differ from the template', () => {
+  test('reports a catalog row whose sections differ from the template', () => {
     const fewer = TEMPLATE_ROW.replace('`Workflow`, ', '');
-    assert.deepEqual(templateFixture({ readme: BASE_README + fewer }), [
-      'templates/basic.md: README.md lists sections Identity, Harm Avoidance; the file has Identity, Workflow, Harm Avoidance',
+    assert.deepEqual(templateFixture({ catalog: BASE_CATALOG + fewer }), [
+      'templates/basic.md: docs/catalog.md lists sections Identity, Harm Avoidance; the file has Identity, Workflow, Harm Avoidance',
     ]);
     const reordered = GOOD_TEMPLATE.replace('## Identity\n\n## Workflow', '## Workflow\n\n## Identity');
     assert.deepEqual(templateFixture({ template: reordered }), [
-      'templates/basic.md: README.md lists sections Identity, Workflow, Harm Avoidance; the file has Workflow, Identity, Harm Avoidance',
+      'templates/basic.md: docs/catalog.md lists sections Identity, Workflow, Harm Avoidance; the file has Workflow, Identity, Harm Avoidance',
     ]);
     const extra = GOOD_TEMPLATE.replace('## Harm Avoidance', '## Tool Permissions\n\n## Harm Avoidance');
     assert.deepEqual(templateFixture({ template: extra }), [
-      'templates/basic.md: README.md lists sections Identity, Workflow, Harm Avoidance; the file has Identity, Workflow, Tool Permissions, Harm Avoidance',
+      'templates/basic.md: docs/catalog.md lists sections Identity, Workflow, Harm Avoidance; the file has Identity, Workflow, Tool Permissions, Harm Avoidance',
     ]);
   });
 });
@@ -1582,7 +1585,8 @@ describe('command line', () => {
       const soul = 'souls/by-use-case/helper.md';
       mkdirSync(join(broken, dirname(soul)), { recursive: true });
       writeFileSync(join(broken, 'CONTRIBUTING.md'), GUIDE);
-      writeFileSync(join(broken, 'README.md'), BASE_README);
+      mkdirSync(join(broken, dirname(CATALOG)));
+      writeFileSync(join(broken, CATALOG), BASE_CATALOG);
       writeFileSync(
         join(broken, soul),
         GOOD_USE_CASE.replace('name: helper\n', '').replace('## Harm Avoidance\n', ''),
@@ -1607,7 +1611,8 @@ describe('command line', () => {
       const soul = 'souls/by-use-case/helper.md';
       mkdirSync(join(single, dirname(soul)), { recursive: true });
       writeFileSync(join(single, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
-      writeFileSync(join(single, 'README.md'), '[helper](souls/by-use-case/helper.md)\n');
+      mkdirSync(join(single, dirname(CATALOG)));
+      writeFileSync(join(single, CATALOG), '[helper](../souls/by-use-case/helper.md)\n');
       writeFileSync(join(single, soul), GOOD_USE_CASE.replace('## Harm Avoidance\n', ''));
       const { status, stdout } = run(['--root', single], elsewhere);
       assert.equal(status, 1);
@@ -1688,7 +1693,8 @@ describe('command line', () => {
     const denied = mkdtempSync(join(tmpdir(), 'check-souls-denied-'));
     try {
       writeFileSync(join(denied, 'CONTRIBUTING.md'), GUIDE);
-      writeFileSync(join(denied, 'README.md'), BASE_README);
+      mkdirSync(join(denied, dirname(CATALOG)));
+      writeFileSync(join(denied, CATALOG), BASE_CATALOG);
       mkdirSync(join(denied, 'souls'));
       const { status, stdout, stderr } = withoutReadPermission([join(denied, 'souls')], () =>
         run(['--root', denied], elsewhere),
@@ -1733,7 +1739,8 @@ describe('command line', () => {
       try {
         mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
         writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
-        writeFileSync(join(root, 'README.md'), '');
+        mkdirSync(join(root, dirname(CATALOG)));
+        writeFileSync(join(root, CATALOG), '');
         const name = 'a\x1b[31mb\r\t\x7f\x9b\nChecked 0 files: 0 problems.md';
         writeFileSync(join(root, 'souls', 'by-use-case', name), '## Identity\n');
         const { status, stdout } = run(['--root', root], elsewhere);
@@ -1755,7 +1762,8 @@ describe('command line', () => {
     try {
       mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
       writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
-      writeFileSync(join(root, 'README.md'), '');
+      mkdirSync(join(root, dirname(CATALOG)));
+      writeFileSync(join(root, CATALOG), '');
       // A right-to-left override, zero width space, soft hyphen, line and paragraph separators and a
       // tag character outside the Basic Multilingual Plane.
       const name = 'a\u{202e}b\u{200b}c\xadd\u{2028}e\u{2029}f\u{e0041}g.md';
@@ -1778,7 +1786,8 @@ describe('command line', () => {
     try {
       mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
       writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
-      writeFileSync(join(root, 'README.md'), '');
+      mkdirSync(join(root, dirname(CATALOG)));
+      writeFileSync(join(root, CATALOG), '');
       // A no-break space, an ideographic space, three Hangul fillers, the Braille blank and a variation
       // selector inside and outside the Basic Multilingual Plane. The ordinary space stays as it is.
       const name = 'a\xa0b\u{3000}c\u{115f}d\u{1160}e\u{3164}f\u{2800}g\u{fe0f}h\u{e0100}i j.md';
@@ -1801,7 +1810,8 @@ describe('command line', () => {
     try {
       mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
       writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
-      writeFileSync(join(root, 'README.md'), '');
+      mkdirSync(join(root, dirname(CATALOG)));
+      writeFileSync(join(root, CATALOG), '');
       // The null notehead is a symbol drawn as blank space. Some file systems do not accept a name with
       // an unassigned code point, so that one is given as an unknown argument instead.
       writeFileSync(join(root, 'souls', 'by-use-case', 'a\u{1d159}b\u{e000}c.md'), '## Identity\n');
@@ -1829,7 +1839,8 @@ describe('command line', () => {
       try {
         mkdirSync(join(root, 'souls', 'by-use-case'), { recursive: true });
         writeFileSync(join(root, 'CONTRIBUTING.md'), GUIDE.split('| By Fleet, member |')[0]);
-        writeFileSync(join(root, 'README.md'), '');
+        mkdirSync(join(root, dirname(CATALOG)));
+        writeFileSync(join(root, CATALOG), '');
         // The text \u{202e}, and a right-to-left override.
         writeFileSync(join(root, 'souls', 'by-use-case', 'a\\u{202e}b.md'), '## Identity\n');
         writeFileSync(join(root, 'souls', 'by-use-case', 'a\u{202e}b.md'), '## Identity\n');
@@ -1936,23 +1947,33 @@ const NPX_PINNED = new RegExp(
   String.raw`^[ \t]+--yes[ \t]+(?:hackmyagent|opena2a-cli)@latest(?=[ \t\`;|&()]|[<>](?!\()|${SENTENCE_PERIOD.source}|$)`,
 );
 
-// The files docTexts reads. A new guide is added here too, so a test that reads the guides is shown
-// to read every one of them.
+// The files docTexts reads. A new docs page or guide is added here too, so a test that reads them is
+// shown to read every one of them.
 const DOC_FILES = [
   'CONTRIBUTING.md',
   'README.md',
+  'docs/catalog.md',
+  'docs/combining-souls.md',
+  'docs/soul-hardening.md',
+  'docs/soul-integrity.md',
+  'docs/taxonomy.md',
+  'docs/where-soul-md-lives.md',
   'guides/creating-your-first-soul.md',
   'guides/soul-for-teams.md',
   'guides/soul-hardening.md',
   'guides/soul-vs-skills.md',
 ];
 
-// Returns [file, text] for README.md, CONTRIBUTING.md and each guide.
+// Returns [file, text] for README.md, CONTRIBUTING.md, each docs page and each guide.
 function docTexts() {
-  const guides = readdirSync(join(repoRoot, 'guides'))
-    .filter((name) => name.endsWith('.md'))
-    .map((name) => `guides/${name}`);
-  return ['README.md', 'CONTRIBUTING.md', ...guides].map((file) => [file, readFileSync(join(repoRoot, file), 'utf8')]);
+  const pages = (dir) =>
+    readdirSync(join(repoRoot, dir))
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => `${dir}/${name}`);
+  return ['README.md', 'CONTRIBUTING.md', ...pages('docs'), ...pages('guides')].map((file) => [
+    file,
+    readFileSync(join(repoRoot, file), 'utf8'),
+  ]);
 }
 
 // Returns `<file>:<line>: <text>` for each line of a markdown file with an npx command that runs
@@ -1972,7 +1993,7 @@ function unpinnedNpxCommands(file, text) {
   });
 }
 
-describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
+describe('npx commands in README.md, CONTRIBUTING.md, the docs pages and the guides', () => {
   test('a command is pinned when @latest is followed by a space, a tab, a backtick, a sentence period or the end of its line', () => {
     const text = [
       'Run it as `npx --yes hackmyagent@latest`.',
@@ -2192,7 +2213,7 @@ describe('npx commands in README.md, CONTRIBUTING.md and the guides', () => {
     for (const name of ['hackmyagent', 'opena2a-cli']) {
       assert.ok(
         texts.some(([, text]) => text.includes(`npx --yes ${name}@latest`)),
-        `no npx ${name} command found in README.md, CONTRIBUTING.md or the guides`,
+        `no npx ${name} command found in README.md, CONTRIBUTING.md, the docs pages or the guides`,
       );
     }
   });
@@ -2226,7 +2247,7 @@ function saysIgnoreOnlyHides(sentence) {
   return [...sentence.matchAll(IGNORE_ONLY_HIDES)].some(([, rest]) => /\bstill exits 1\b/.test(rest));
 }
 
-describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () => {
+describe('the --ignore option in README.md, CONTRIBUTING.md, the docs pages and the guides', () => {
   test('reads each sentence that starts at --ignore, with its file and line', () => {
     const text = 'Scan it.\n`--ignore CONFIG-002` hides the finding but still exits 1. Then reword.\r\nScan again.\r\n';
     assert.deepEqual(ignoreSentences('a.md', text), [
@@ -2292,7 +2313,7 @@ describe('the --ignore option in README.md, CONTRIBUTING.md and the guides', () 
 
   test('a sentence about --ignore says it only hides the finding from the list and the command still exits 1', () => {
     const sentences = docTexts().flatMap(([file, text]) => ignoreSentences(file, text));
-    for (const file of ['README.md', 'guides/soul-hardening.md']) {
+    for (const file of ['docs/soul-hardening.md', 'guides/soul-hardening.md']) {
       assert.ok(
         sentences.some((sentence) => sentence.startsWith(`${file}:`)),
         `no sentence that starts at --ignore found in ${file}`,
@@ -2348,7 +2369,7 @@ function unnamedGuardSigns(file, text) {
 // each as its file and its heading line as the file writes it.
 const HASH_NOTE = /The record is a hash, not a keyed signature/;
 const HASH_NOTE_SECTIONS = [
-  ['README.md', '## Soul Integrity'],
+  ['docs/soul-integrity.md', '# Soul Integrity'],
   ['guides/soul-hardening.md', '### 1. Integrity Verification with ConfigGuard'],
 ];
 
@@ -2544,7 +2565,7 @@ function guardProblems(command, commands, soul, { timeout = SCAN_TIMEOUT_MS } = 
   return problems;
 }
 
-describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
+describe('guard commands in README.md, CONTRIBUTING.md, the docs pages and the guides', () => {
   test('a guard sign command is followed by --files', () => {
     const text = [
       'npx --yes opena2a-cli@latest guard sign --files SOUL.md',
@@ -2927,19 +2948,19 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.deepEqual(
       commands.flatMap((words) => words.filter((word) => /["']/.test(word))),
       [],
-      'a guard command in README.md, CONTRIBUTING.md or the guides quotes a word, and guardCommands does not read quotes',
+      'a guard command in README.md, CONTRIBUTING.md, the docs pages or the guides quotes a word, and guardCommands does not read quotes',
     );
     assert.ok(
       commands.some((words) => words[1] === 'sign' && words.includes('SOUL.md')),
-      'no npx opena2a-cli guard sign --files SOUL.md command found in README.md, CONTRIBUTING.md or the guides',
+      'no npx opena2a-cli guard sign --files SOUL.md command found in README.md, CONTRIBUTING.md, the docs pages or the guides',
     );
     assert.ok(
       commands.some((words) => words[1] === 'verify'),
-      'no npx opena2a-cli guard verify command found in README.md, CONTRIBUTING.md or the guides',
+      'no npx opena2a-cli guard verify command found in README.md, CONTRIBUTING.md, the docs pages or the guides',
     );
   });
 
-  // The check accepts a guard sign --files with no file after it, so README.md can describe the command in
+  // The check accepts a guard sign --files with no file after it, so a document can describe the command in
   // prose. Only the opt-in OPENA2A_CLI run, which runs each npx guard sign command, would find one that signs
   // nothing.
   test('CONTRIBUTING.md says the default run checks guard sign for --files, not for the files after it', () => {
@@ -2949,7 +2970,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.doesNotMatch(guide, /followed by the files it signs|names its files after/);
   });
 
-  test('README.md, CONTRIBUTING.md and the guides name the directory guard sign writes to', () => {
+  test('README.md, CONTRIBUTING.md, the docs pages and the guides name the directory guard sign writes to', () => {
     const texts = docTexts();
     const others = texts.flatMap(([file, text]) =>
       text.split(/\r?\n/).flatMap((line, index) => (/\.configguard\b/i.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [])),
@@ -2957,7 +2978,7 @@ describe('guard commands in README.md, CONTRIBUTING.md and the guides', () => {
     assert.deepEqual(others, []);
     assert.ok(
       texts.some(([, text]) => text.includes(GUARD_STORE)),
-      `README.md, CONTRIBUTING.md and the guides do not name ${GUARD_STORE}`,
+      `README.md, CONTRIBUTING.md, the docs pages and the guides do not name ${GUARD_STORE}`,
     );
     const hardening = readFileSync(join(repoRoot, 'guides', 'soul-hardening.md'), 'utf8');
     const signed = existsSync(join(repoRoot, GUARD_STORE));
@@ -3183,7 +3204,7 @@ function openclawWorkspaceProblems(file, text) {
   );
 }
 
-describe('OpenClaw workspace paths in README.md, CONTRIBUTING.md and the guides', () => {
+describe('OpenClaw workspace paths in README.md, CONTRIBUTING.md, the docs pages and the guides', () => {
   test('a path names the default workspace or a workspace-<name> directory', () => {
     const text = [
       'Natively reads `~/.openclaw/workspace/SOUL.md` or `~/.openclaw/workspace-<name>/SOUL.md`.',
