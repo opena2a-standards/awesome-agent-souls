@@ -15,7 +15,7 @@ my-project/
   src/
 ```
 
-If your tool uses a different filename (e.g., `CLAUDE.md` for Claude Code, `.cursorrules` for Cursor), either rename the file or add a reference like `See SOUL.md for agent identity` in the tool-specific file. See the [placement guide](../README.md#where-soulmd-lives) for full details.
+If your tool uses a different filename (e.g., `CLAUDE.md` for Claude Code, `.cursorrules` for Cursor), either rename the file or add a reference like `See SOUL.md for agent identity` in the tool-specific file. See the [placement guide](../docs/where-soul-md-lives.md) for full details.
 
 Start with this structure:
 

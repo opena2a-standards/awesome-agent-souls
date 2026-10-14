@@ -6,6 +6,7 @@ Thank you for your interest in contributing. This guide covers where a new soul 
 
 ## Table of Contents
 
+- [Where Contributions Help](#where-contributions-help)
 - [Submitting a New Soul](#submitting-a-new-soul)
 - [Soul File Requirements](#soul-file-requirements)
 - [Check Your File](#check-your-file)
@@ -18,13 +19,28 @@ Thank you for your interest in contributing. This guide covers where a new soul 
 
 ---
 
+## Where Contributions Help
+
+We welcome contributions across all five dimensions.
+
+Areas where contributions are particularly valuable:
+
+- **By Industry:** Souls for industries not yet covered (insurance, agriculture, transportation, telecom)
+- **By Org Type:** Souls for organization types not yet covered (franchise, cooperative, academic department)
+- **By Role:** Souls for specialized roles (database administrator, QA engineer, technical product manager)
+- **By Use Case:** Souls for common agent workflows (voice journaling, brand monitoring, lead qualification, report generator)
+- **By Fleet:** Teams for workflows not yet covered (marketing operations, product launch, security compliance)
+- **Starter Examples:** Souls for common project types (mobile app, CLI tool, microservice, data pipeline)
+
+---
+
 ## Submitting a New Soul
 
 1. **Fork** this repository.
 2. **Create a branch** with a descriptive name: `add/by-role/forensic-analyst` or `improve/by-industry/healthcare-agent`.
-3. **Pick the dimension** your soul belongs to (see [The Five-Dimensional Taxonomy](README.md#the-five-dimensional-taxonomy)) and create the file at the location the [requirements table](#soul-file-requirements) gives for it. The quickest start is to copy the closest existing soul in that dimension, or a file from [`templates/`](templates/), and keep its section layout.
+3. **Pick the dimension** your soul belongs to (see [The Five-Dimensional Taxonomy](docs/taxonomy.md#the-five-dimensional-taxonomy)) and create the file at the location the [requirements table](#soul-file-requirements) gives for it. The quickest start is to copy the closest existing soul in that dimension, or a file from [`templates/`](templates/), and keep its section layout.
 4. **Write the soul** following the requirements below.
-5. **List it in the README.** Add a row to the table for its dimension in [README.md](README.md). If the section heading carries a count, such as "By Role (25 souls)", update the count there and in the Contents list.
+5. **List it in the catalog.** Add a row to the table for its dimension in [docs/catalog.md](docs/catalog.md). If the section heading carries a count, such as "By Role (25 souls)", update the count there.
 6. **Run the checks** in [Check Your File](#check-your-file).
 7. **Open a pull request** against `main` with a clear title (e.g., "Add forensic-analyst soul to by-role/security").
 
@@ -52,7 +68,7 @@ How to read the table:
 - A word in angle brackets is one path segment you choose. For By Role, `<area>` is one of `security`, `development`, `devops`, `data-science`, `leadership` or `creative`.
 - `category: industry` means the field must have exactly that value. `fleet: <fleet>` and `name: <fleet>` mean the value must equal the fleet's directory name.
 - A section is present when the file has a `##` heading with that name, or a `##` heading that starts with the name followed by a space (for example `## Boundaries (Things You Must Never Do)`). Section order is not checked; existing souls put `Identity` first and `Harm Avoidance` last.
-- The table lists the sections a file must contain. A soul may add other `##` sections: By Use Case souls add `Core Capabilities` or `Workflow`, and `personal-assistant.md` also adds `Values and Principles`. The starter examples add sections for their kind of project: `open-source-repo.md` adds `Git Practices`, `Licensing` and `Release Process` among others, and `website-project.md` adds `Tech Stack`, `Testing` and `Deployment` among others. Templates list every section in the README, as [Check Your File](#check-your-file) describes.
+- The table lists the sections a file must contain. A soul may add other `##` sections: By Use Case souls add `Core Capabilities` or `Workflow`, and `personal-assistant.md` also adds `Values and Principles`. The starter examples add sections for their kind of project: `open-source-repo.md` adds `Git Practices`, `Licensing` and `Release Process` among others, and `website-project.md` adds `Tech Stack`, `Testing` and `Deployment` among others. Templates list every section in [docs/catalog.md](docs/catalog.md), as [Check Your File](#check-your-file) describes.
 - `Boundaries` or `Constraints`: fleet members carry one of the two. The `incident-response-team`, `red-team-ops` and `soc-defense` fleets use `Core Responsibilities`, `Behavioral Rules` and `Constraints`; the other fleets use `Core Mission`, `Communication Style`, `Workflow`, `Boundaries` and `Handoff Protocol`. Follow the layout of the fleet you are adding to.
 - `Harm Avoidance` covers judgment in gray areas, where an action is technically permitted but may cause unintended harm. See the README introduction for the specification it follows.
 
@@ -78,7 +94,7 @@ author: your-github-username
 | `category` | Dimension label, with the value the table gives |
 | `fleet` | Fleet members only: the fleet's directory name |
 | `team_size` | `FLEET.md` only: the number of agents in the fleet |
-| `coordination` | `FLEET.md` only: `sequential`, `parallel`, `hub-spoke` or `mesh` (see [Coordination Patterns](README.md#coordination-patterns)) |
+| `coordination` | `FLEET.md` only: `sequential`, `parallel`, `hub-spoke` or `mesh` (see [Coordination Patterns](docs/catalog.md#coordination-patterns)) |
 
 Soul files carry no version field. Git history records each change.
 
@@ -94,7 +110,7 @@ Nothing runs automatically on pull requests: the repository has no CI workflow. 
    node scripts/check-souls.mjs
    ```
 
-   It checks every `.md` file under `souls/` and `templates/` against the [requirements table](#soul-file-requirements): the file sits at a listed location, carries the required frontmatter fields and sections, and, for files under `souls/`, is linked from README.md directly or through its fleet directory. A file under `templates/` must have a row in the README's [Templates](README.md#templates-4-templates) table whose last cell lists all of the template's `##` sections in file order, so a change to a template's sections also changes that row. It prints one line per problem and exits with a non-zero status if it finds any. If you change the script, or a command in README.md, this file or a guide that runs hackmyagent or opena2a-cli through npx, also run `node --test scripts/check-souls.test.mjs`; it checks that every such command is written `npx --yes <package>@latest`, and that every signing command is written `guard sign --files`. It does not check that file names follow `--files`. If you change a row of the README's By Industry or By Organization Type table, or remove a regulation from a soul, also run `node --test scripts/check-souls.test.mjs`; it checks that the soul the row links to names each standard it reads from the row's last column. Commas and slashes split that column into names; a name is read when one of its words contains a digit or two capital letters, from the first such word to the last, so FDA 21 CFR Part 11 is read whole, OSHA reporting requirements is read as OSHA and ABA Model Rules is read as ABA. When the first such word is a number with no letter, the word before it is read too, so Section 508 is read as Section 508, not 508. A name with no such word is not read, so the test does not check Fair Housing Act or attorney-client privilege. If you change a By Use Case soul or the By Use Case table in README.md, run `node --test scripts/check-souls.test.mjs` as well: it checks that each soul names every platform its row lists under Popular Platforms. If you change a template or the guide's Minimal Template, set the `HACKMYAGENT` environment variable to `npx --yes hackmyagent@latest`, in quotes because the command contains spaces, and run `node --test scripts/check-souls.test.mjs`: with `HACKMYAGENT` set, the tests also run `hackmyagent scan-soul` on every template and the Minimal Template and fail if the scan exits non-zero, does not detect the role-play refusal, or runs longer than two minutes. `@latest` makes npx run the published release even when an older `hackmyagent` is installed. The tests run the scanner with `OPENA2A_TELEMETRY=off`, which turns off its anonymous usage telemetry. If you change a `guard sign --files` or `guard verify` command, set `OPENA2A_CLI` to `npx --yes opena2a-cli@latest`, quoted the same way, and run `node --test scripts/check-souls.test.mjs`: with `OPENA2A_CLI` set, the tests also run each such command, with telemetry off, in a directory that holds only a `SOUL.md`, and fail if signing does not write `.opena2a/guard/signatures.json`, if `guard verify` fails on the signed file, or if it passes after the file changes.
+   It checks every `.md` file under `souls/` and `templates/` against the [requirements table](#soul-file-requirements): the file sits at a listed location, carries the required frontmatter fields and sections, and, for files under `souls/`, is linked from docs/catalog.md directly or through its fleet directory. A file under `templates/` must have a row in the catalog's [Templates](docs/catalog.md#templates-4-templates) table whose last cell lists all of the template's `##` sections in file order, so a change to a template's sections also changes that row. It prints one line per problem and exits with a non-zero status if it finds any. If you change the script, or a command in README.md, this file, a page under `docs/` or a guide that runs hackmyagent or opena2a-cli through npx, also run `node --test scripts/check-souls.test.mjs`; it checks that every such command is written `npx --yes <package>@latest`, and that every signing command is written `guard sign --files`. It does not check that file names follow `--files`. If you change a row of the catalog's By Industry or By Organization Type table, or remove a regulation from a soul, also run `node --test scripts/check-souls.test.mjs`; it checks that the soul the row links to names each standard it reads from the row's last column. Commas and slashes split that column into names; a name is read when one of its words contains a digit or two capital letters, from the first such word to the last, so FDA 21 CFR Part 11 is read whole, OSHA reporting requirements is read as OSHA and ABA Model Rules is read as ABA. When the first such word is a number with no letter, the word before it is read too, so Section 508 is read as Section 508, not 508. A name with no such word is not read, so the test does not check Fair Housing Act or attorney-client privilege. If you change a By Use Case soul or the By Use Case table in docs/catalog.md, run `node --test scripts/check-souls.test.mjs` as well: it checks that each soul names every platform its row lists under Popular Platforms. If you change a template or the guide's Minimal Template, set the `HACKMYAGENT` environment variable to `npx --yes hackmyagent@latest`, in quotes because the command contains spaces, and run `node --test scripts/check-souls.test.mjs`: with `HACKMYAGENT` set, the tests also run `hackmyagent scan-soul` on every template and the Minimal Template and fail if the scan exits non-zero, does not detect the role-play refusal, or runs longer than two minutes. `@latest` makes npx run the published release even when an older `hackmyagent` is installed. The tests run the scanner with `OPENA2A_TELEMETRY=off`, which turns off its anonymous usage telemetry. If you change a `guard sign --files` or `guard verify` command, set `OPENA2A_CLI` to `npx --yes opena2a-cli@latest`, quoted the same way, and run `node --test scripts/check-souls.test.mjs`: with `OPENA2A_CLI` set, the tests also run each such command, with telemetry off, in a directory that holds only a `SOUL.md`, and fail if signing does not write `.opena2a/guard/signatures.json`, if `guard verify` fails on the signed file, or if it passes after the file changes.
 
 2. **Prose check.** Requires Node.js and git; there is nothing to install.
 
@@ -104,7 +120,7 @@ Nothing runs automatically on pull requests: the repository has no CI workflow. 
 
    It reads the `.md` and `.mdx` files git tracks, so run `git add` on a new file first. It skips CHANGELOG.md, CHANGELOG.mdx, changelog fragments under a `changelog.d` directory, LICENSE files and files under a directory of installed, generated or test files, such as `node_modules` or `fixtures`. It prints `file:line:column` for each dash in the prose: an em dash, or a double hyphen or an en dash with a space or the start or end of the line on each side. Write the sentence with a period, a comma, a colon or parentheses instead. It also reports a heading named "Why this exists" or "Why this matters": put what that section says under the heading it explains. Fenced code blocks and inline code are not checked, so a command keeps its `--` separator and its `--flag` options. It exits with a non-zero status if it finds a problem. If you change the script, also run `node --test scripts/check-docs-prose.test.mjs`.
 
-3. **Injection scan.** Scan your file for prompt-injection patterns as described in [Soul Hardening](README.md#soul-hardening).
+3. **Injection scan.** Scan your file for prompt-injection patterns as described in [Soul Hardening](docs/soul-hardening.md).
 
 ---
 
@@ -154,7 +170,7 @@ A maintainer reads each pull request and decides whether it is merged. No automa
 - **Quality**: Does the soul meaningfully shape agent behavior? Is it specific and actionable?
 - **Uniqueness**: Does it offer something distinct from existing souls in the same dimension?
 - **Safety**: Does the soul respect reasonable boundaries? Does it instruct the agent to avoid harmful actions?
-- **Completeness**: Does it carry the frontmatter fields and sections the [requirements table](#soul-file-requirements) lists, and is it listed in the README?
+- **Completeness**: Does it carry the frontmatter fields and sections the [requirements table](#soul-file-requirements) lists, and is it listed in the catalog?
 
 ### Feedback and iteration
 
