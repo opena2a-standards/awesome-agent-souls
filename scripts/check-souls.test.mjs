@@ -1954,6 +1954,7 @@ const DOC_FILES = [
   'README.md',
   'docs/catalog.md',
   'docs/combining-souls.md',
+  'docs/offline-catalog-page.md',
   'docs/soul-hardening.md',
   'docs/soul-integrity.md',
   'docs/taxonomy.md',
