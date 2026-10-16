@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>SOUL Library — __REPO__</title>
+<meta name="description" content="A standalone, offline browser for the agent SOUL definitions in __REPO__.">
+<meta name="generator" content="scripts/build-souls-page.mjs">
+<script>
+  /* Set the theme before first paint to avoid a flash. */
+  (function () {
+    try {
+      var m = localStorage.getItem("souls-theme") || "auto";
+      var dark = m === "dark" || (m === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    } catch (e) {}
+  })();
+</script>
+<style>
+__CSS__
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hdr">
+  <button class="menubtn" id="menubtn" aria-label="Open navigation" aria-controls="side" aria-expanded="false">☰</button>
+  <div class="brand">
+    <span class="mark" aria-hidden="true">S</span>
+    <span>SOUL Library<br><span class="sub">__REPO__</span></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="searchwrap">
+    <span class="icon" aria-hidden="true">⌕</span>
+    <input id="search" type="search" placeholder="Search every soul, in full…  (⌘K)" autocomplete="off" spellcheck="false"
+           aria-label="Search souls" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="results">
+  </div>
+  <div class="theme" role="group" aria-label="Theme">
+    <button type="button" data-theme-btn="light" title="Light" aria-label="Light theme" aria-pressed="false">☀</button>
+    <button type="button" data-theme-btn="dark" title="Dark" aria-label="Dark theme" aria-pressed="false">☾</button>
+    <button type="button" data-theme-btn="auto" title="Auto" aria-label="Match system theme" aria-pressed="false">◐</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="side" id="side" aria-label="Taxonomy"></nav>
+  <main class="main" id="main" tabindex="-1"></main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<p class="vh" id="live" role="status" aria-live="polite"></p>
+
+<noscript>
+  <div class="nojs">
+    <h1>This page needs JavaScript</h1>
+    <p>Every soul is already inside this file, but the browser builds the pages from it on the fly,
+      so nothing renders with scripting turned off.</p>
+    <p>Enable JavaScript for this file, or read the markdown in the repository directly.</p>
+  </div>
+</noscript>
+
+<footer class="foot">
+  Generated __DATE__ from <strong>__REPO__</strong> — __COUNT__ souls &amp; templates, __SECTIONS__ groups.
+  This file is fully self-contained and works offline; share it as an email attachment.
+</footer>
+
+<script type="application/json" id="souls-data">__DATA__</script>
+<script>
+__JS__
+</script>
+</body>
+</html>
