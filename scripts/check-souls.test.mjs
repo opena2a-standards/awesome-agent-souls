@@ -3607,6 +3607,28 @@ describe('this test file', () => {
     },
   );
 
+  // The notAGitClone and merge-commit tests above select tests with a --test-name-pattern that starts with
+  // the name of their suite. Node.js 20.20.0 matches the pattern against the name of each test alone, so
+  // both fail there, and CONTRIBUTING.md names the version they need.
+  test(
+    'each Node.js requirement in CONTRIBUTING.md names 22 or later, and the Node.js running this file meets it',
+    () => {
+      const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
+      const requirements = [...guide.matchAll(/Requires Node\.js(?: (\d+) or later)?/g)];
+      assert.ok(requirements.length > 0, 'CONTRIBUTING.md has no "Requires Node.js" sentence');
+      for (const [sentence, version] of requirements) {
+        assert.ok(version, `CONTRIBUTING.md says "${sentence}" with no version; write "Requires Node.js 22 or later"`);
+        assert.ok(Number(version) >= 22, `CONTRIBUTING.md says "${sentence}"; the tests in this file need 22 or later`);
+      }
+      const minimum = Math.max(...requirements.map(([, version]) => Number(version)));
+      const major = Number(process.versions.node.split('.')[0]);
+      assert.ok(
+        major >= minimum,
+        `CONTRIBUTING.md says the checks require Node.js ${minimum} or later; this is Node.js ${process.version}`,
+      );
+    },
+  );
+
   // Returns one line for each line of a comment in `lines` that ends inside a sentence and is less than half
   // as wide as the widest line of its comment. A comment is a run of // lines with the same indentation. A
   // line ends inside a sentence when the next line of its comment starts with a lowercase letter, or when the
