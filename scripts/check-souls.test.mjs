@@ -379,6 +379,32 @@ function mainRef(dir) {
   );
 }
 
+// This repository, as owner/name in lowercase. It moved from opena2a-org to opena2a-standards on GitHub,
+// which still serves it at the old owner too, so a clone of it can name either.
+const REPOSITORY_PATHS = ['opena2a-standards/awesome-agent-souls', 'opena2a-org/awesome-agent-souls'];
+
+// A remote URL that names a repository by owner and name, as https://github.com/owner/name.git,
+// ssh://git@github.com/owner/name.git and git@github.com:owner/name.git do, with or without .git and a slash
+// at the end. The host is not read, so a URL with an SSH host alias in place of github.com names the same
+// repository. The owner and the name are read as letters, digits, `_`, `.` and `-`, and the group holds
+// owner/name. A local path, a file URL and a path with other than two parts name none.
+const REMOTE_URL = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/]*@)?[^@/]+\/|(?:[^@/:]*@)?[^@/:]+:)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i;
+
+// Returns the owner/name, in lowercase, of the repository that a remote URL names, or undefined.
+function remoteRepository(url) {
+  return REMOTE_URL.exec(url)?.[1].toLowerCase();
+}
+
+// Returns the repository that origin names in the clone at `dir`, as owner/name in lowercase, when it is not
+// this repository, as in a clone of a fork. Returns undefined when origin names this repository, when its
+// URL names no owner and name, as the path of another clone does, and when the clone has no origin. The URL
+// is read as the clone's configuration gives it, before any url.<base>.insteadOf setting rewrites it.
+function forkOrigin(dir) {
+  const { status, stdout } = spawnSync('git', ['config', '--get', 'remote.origin.url'], { cwd: dir, encoding: 'utf8' });
+  const origin = status === 0 ? remoteRepository(stdout.trim()) : undefined;
+  return REPOSITORY_PATHS.includes(origin) ? undefined : origin;
+}
+
 // Returns the merge commits in the history of any of the `revisions`, newest first, each as its hash, a
 // space and its subject.
 function mergeCommits(dir, ...revisions) {
@@ -415,7 +441,44 @@ function unnamedMergeCommits(guide, commits) {
   return commits.filter((commit) => !named.some((hash) => commit.startsWith(hash)));
 }
 
-describe('mainRef, mergeCommits, commonMergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && 'git did not run' }, () => {
+describe('remoteRepository', () => {
+  test('reads owner/name in lowercase from an https, ssh, git or scp-like URL on any host, with or without .git', () => {
+    for (const url of [
+      'https://github.com/Example-User/Awesome-Agent-Souls.git',
+      'https://github.com/example-user/awesome-agent-souls',
+      'http://github.com/example-user/awesome-agent-souls/',
+      'ssh://git@github.com/example-user/awesome-agent-souls.git',
+      'ssh://git@github.com:22/example-user/awesome-agent-souls.git',
+      'git://github.com/example-user/awesome-agent-souls.git',
+      'git@github.com:example-user/awesome-agent-souls.git',
+      'git@github-work:example-user/awesome-agent-souls.git',
+      'github.com:example-user/awesome-agent-souls.git/',
+      'https://gitlab.com/example-user/awesome-agent-souls.git',
+    ]) {
+      assert.equal(remoteRepository(url), 'example-user/awesome-agent-souls', url);
+    }
+    assert.equal(remoteRepository('https://github.com/example-user/agent.souls.git'), 'example-user/agent.souls');
+  });
+
+  test('reads no repository from a local path, a file URL or a path with other than two parts', () => {
+    for (const url of [
+      '/home/example/awesome-agent-souls',
+      '../awesome-agent-souls',
+      'example-user/awesome-agent-souls',
+      'C:\\Users\\example\\awesome-agent-souls',
+      'C:\\Users\\example/awesome-agent-souls',
+      'C:/Users/example/awesome-agent-souls',
+      'file:///home/example/awesome-agent-souls',
+      'https://github.com/awesome-agent-souls.git',
+      'https://example.com/github.com/example-user/awesome-agent-souls.git',
+      'https://github.com/example-user/awesome-agent-souls/tree/main',
+    ]) {
+      assert.equal(remoteRepository(url), undefined, url);
+    }
+  });
+});
+
+describe('mainRef, forkOrigin, mergeCommits, commonMergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && 'git did not run' }, () => {
   let repo;
   let git;
   let commit;
@@ -515,12 +578,44 @@ describe('mainRef, mergeCommits, commonMergeCommits and unnamedMergeCommits', { 
     git('update-ref', '-d', 'refs/heads/main');
     assert.equal(mainRef(repo), undefined);
   });
+
+  test('forkOrigin names the repository that origin names when it is not this repository, and nothing otherwise', () => {
+    assert.equal(forkOrigin(repo), undefined);
+    const urls = [
+      ['https://github.com/Example-User/awesome-agent-souls.git', 'example-user/awesome-agent-souls'],
+      ['git@github-work:example-user/awesome-agent-souls.git', 'example-user/awesome-agent-souls'],
+      ['https://github.com/opena2a-standards/awesome-agent-souls.git', undefined],
+      ['git@github.com:OpenA2A-Org/awesome-agent-souls.git', undefined],
+      ['/home/example/awesome-agent-souls', undefined],
+    ];
+    try {
+      for (const [url, fork] of urls) {
+        git('config', 'remote.origin.url', url);
+        assert.equal(forkOrigin(repo), fork, url);
+      }
+      // The URL is read before url.<base>.insteadOf rewrites it, here to a path of three parts, which names none.
+      git('config', 'url.https://mirror.example.com/github/.insteadOf', 'https://github.com/');
+      git('config', 'remote.origin.url', 'https://github.com/example-user/awesome-agent-souls.git');
+      assert.equal(forkOrigin(repo), 'example-user/awesome-agent-souls');
+    } finally {
+      for (const section of ['remote.origin', 'url.https://mirror.example.com/github/']) {
+        spawnSync('git', ['config', '--remove-section', section], { cwd: repo });
+      }
+    }
+  });
 });
 
 const MAIN_REF = NOT_A_CLONE ? undefined : mainRef(repoRoot);
-// Nothing in a clone of a fork with no upstream remote tells it from a clone of the repository the fork
-// was made from, so a merge commit of the fork's own fails the test there when the checked-out commit
-// carries it, as the fork's main and a branch made from it after the merge do. The failure says what to do.
+// Where the clone has no upstream/main and origin names another repository than this one, as in a clone of
+// a fork, the main that the test reads is the fork's own. It can carry a merge commit of the fork's own, as
+// the fork's main does after this repository is merged into it, and nothing in the clone tells such a merge
+// commit from one on this repository's main. So there a merge commit that CONTRIBUTING.md does not name
+// skips the test instead of failing it, and the skip says how to read this repository's main.
+const FORK = MAIN_REF && MAIN_REF !== UPSTREAM_MAIN ? forkOrigin(repoRoot) : undefined;
+// Where origin names no owner and name, as in a clone of another clone, nothing in the clone tells a clone
+// of a fork from a clone of this repository, so a merge commit of a fork's own fails the test there when
+// the checked-out commit carries it, as the fork's main and a branch made from it after the merge do. The
+// failure says what to do.
 const FORK_HINT =
   MAIN_REF === UPSTREAM_MAIN
     ? ''
@@ -585,11 +680,20 @@ describe('this repository', () => {
         !MAIN_REF &&
         `the history of main cannot be read: ${NOT_A_CLONE || 'the clone has no upstream/main, origin/main or main branch'}`,
     },
-    () => {
+    (t) => {
       const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
       assert.match(guide, /squash-merged/);
+      const unnamed = unnamedMergeCommits(guide, commonMergeCommits(repoRoot, MAIN_REF));
+      if (FORK && unnamed.length > 0) {
+        t.skip(
+          `${MAIN_REF} is the main of ${FORK}, not of this repository, so a merge commit in its history can be ` +
+            `the fork's own, and CONTRIBUTING.md does not name ${unnamed.join(', ')}. Add the repository ` +
+            `${FORK} was forked from as a remote named upstream and fetch it, and this test reads upstream/main`,
+        );
+        return;
+      }
       assert.deepEqual(
-        unnamedMergeCommits(guide, commonMergeCommits(repoRoot, MAIN_REF)),
+        unnamed,
         [],
         `CONTRIBUTING.md does not name a merge commit in the history of both ${MAIN_REF} and HEAD${FORK_HINT}`,
       );
@@ -3435,6 +3539,67 @@ describe('this test file', () => {
         assert.match(stdout, /^# pass [1-9]/m);
       } finally {
         rmSync(other, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test(
+    "the merge-commit test is skipped in a clone of a fork with no upstream remote whose main carries a merge commit of the fork's own, and fails in a clone of this repository",
+    { skip: !GIT_RUNS && 'git did not run' },
+    () => {
+      const clone = mkdtempSync(join(tmpdir(), 'check-souls-fork-'));
+      try {
+        // The clone holds the scripts and CONTRIBUTING.md. Its main and its checked-out commit are a merge
+        // into a main with a change of its own, as a fork's main is after the repository it was forked from
+        // is merged into it, and it has no upstream remote.
+        mkdirSync(join(clone, 'scripts'));
+        for (const name of readdirSync(join(repoRoot, 'scripts')).filter((name) => name.endsWith('.mjs'))) {
+          writeFileSync(join(clone, 'scripts', name), readFileSync(join(repoRoot, 'scripts', name)));
+        }
+        writeFileSync(join(clone, 'CONTRIBUTING.md'), readFileSync(join(repoRoot, 'CONTRIBUTING.md')));
+        const git = (...args) => {
+          const identity = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com'];
+          const { status, stdout, stderr } = spawnSync('git', [...identity, ...args], {
+            cwd: clone,
+            encoding: 'utf8',
+            input: '',
+          });
+          assert.equal(status, 0, `git ${args[0]} failed: ${stderr}`);
+          return stdout.trim();
+        };
+        git('init', '--quiet');
+        const tree = git('mktree');
+        const commit = (subject, ...parents) =>
+          git('commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', subject);
+        const base = commit('Base');
+        const forkMerge = commit('Merge upstream', commit('Fork change', base), commit('Change (#1)', base));
+        git('update-ref', 'refs/remotes/origin/main', forkMerge);
+        git('update-ref', '--no-deref', 'HEAD', forkMerge);
+        const { NODE_TEST_CONTEXT, ...env } = process.env;
+        const run = (url) => {
+          git('config', 'remote.origin.url', url);
+          return spawnSync(
+            process.execPath,
+            [
+              '--test',
+              '--test-reporter=tap',
+              '--test-name-pattern=^this repository CONTRIBUTING\\.md, which says pull requests are squash-merged',
+              join(clone, 'scripts', 'check-souls.test.mjs'),
+            ],
+            { encoding: 'utf8', env },
+          );
+        };
+        const fork = run('https://github.com/example-user/awesome-agent-souls.git');
+        assert.equal(fork.status, 0, fork.stdout);
+        assert.match(
+          fork.stdout,
+          /^\s*ok \d+ - CONTRIBUTING\.md, which says .* # SKIP refs\/remotes\/origin\/main is the main of example-user\/awesome-agent-souls,/m,
+        );
+        const own = run('https://github.com/opena2a-standards/awesome-agent-souls.git');
+        assert.equal(own.status, 1, own.stdout);
+        assert.match(own.stdout, /^\s*not ok \d+ - CONTRIBUTING\.md, which says /m);
+      } finally {
+        rmSync(clone, { recursive: true, force: true });
       }
     },
   );
