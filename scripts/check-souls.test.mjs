@@ -3592,22 +3592,34 @@ describe('this test file', () => {
   // `case 'a': {`, whose block holds statements.
   const AFTER_CASE = /(?<=(?:(?<![\w$])case(?![\w$])[^;{}:]*|(?<![\w$])default\s*):\s*)/y;
 
+  // A curly bracket, where the search starts, after the colon of a label, as in `outer: {`, or of the last of
+  // a run of labels, as in `outer: inner: {`. The first label follows the start of the code, `{`, `}`, `;`,
+  // `)`, `]`, `else`, `do`, the colon of a case clause or a line break after a name or a number, where a
+  // statement may start, with no more than white space between them. A name after `?` or a comma, as
+  // `fallback` is in `ready ? fallback : {` and `b` in `a: 1, b: {`, is read as no label, and so is one after
+  // the colon of a conditional, as `b` is in `ready ? kind ? a : b : {`.
+  const AFTER_LABEL =
+    /(?<=(?:^|[{};)\]]|[\w$][^\S\n]*\n|(?<![\w$])(?:else|do)\s|(?<![\w$])case(?![\w$])[^;{}:]*:)(?:\s*[\w$]+\s*:)+\s*)/y;
+
   // Returns whether the curly bracket that starts at `place` in `code`, after token `last` of `tokens`, opens
   // an object literal or a class body, whose members may be methods, rather than a block, or undefined when
-  // no code comes before it. `opening` holds the index of the opening bracket of each closing bracket. It
-  // opens a block after `=>`, `;`, `{`, `}` and the colon of a case or default clause, and an object literal
-  // after a word in VALUE_WORDS or any other sign but a closing bracket. After a name or a closing bracket,
-  // it opens a class body when `class` or `extends` comes before them with no more than names and brackets
-  // between, as in `class Scaler {` and `class Wide extends mixin(ratio) {`, and a block otherwise, as in
-  // `try {` and `if (ratio) {`.
-  function holdsMembers(code, place, tokens, last, opening) {
+  // no code comes before it. `opening` holds the index of the opening bracket of each closing bracket, and
+  // `members` whether the bracket around it opens an object literal or a class body, where no label stands.
+  // It opens a block after `=>`, `;`, `{`, `}`, the colon of a case or default clause and, unless `members`
+  // is true, the colon of a label, as AFTER_LABEL reads it. It opens an object literal after any other colon,
+  // as the one after `inner` in `x = { inner: {`, a word in VALUE_WORDS or any other sign but a closing bracket.
+  // After a name or a closing bracket, it opens a class body when `class` or `extends` comes before them with
+  // no more than names and brackets between, as in `class Scaler {` and `class Wide extends mixin(ratio) {`, and
+  // a block otherwise, as in `try {` and `if (ratio) {`.
+  function holdsMembers(code, place, tokens, last, opening, members) {
     BEFORE_CURLY.lastIndex = place;
     const before = BEFORE_CURLY.exec(code)?.[1];
     if (before === undefined) return undefined;
     if (before === '=>' || /^[;{}]$/.test(before)) return false;
     if (before === ':') {
       AFTER_CASE.lastIndex = place;
-      return !AFTER_CASE.test(code);
+      AFTER_LABEL.lastIndex = place;
+      return !AFTER_CASE.test(code) && (members || !AFTER_LABEL.test(code));
     }
     if (VALUE_WORDS.has(before) || !/^[\w$)\]]/.test(before)) return true;
     for (let at = last; at >= 0; at -= 1) {
@@ -3833,7 +3845,10 @@ describe('this test file', () => {
       if (token === '=>') frame.arrows.push(index);
       else if (token === '(' || token === '[' || token === '{') {
         around[index] = frame.open;
-        if (token === '{') members[index] = holdsMembers(code, places[index], tokens, index - 1, opens) ?? true;
+        if (token === '{') {
+          members[index] =
+            holdsMembers(code, places[index], tokens, index - 1, opens, members[frame.open] === true) ?? true;
+        }
         frames.push({ open: index, arrows: [] });
       } else if (/^[,;)\]}]$/.test(token)) {
         for (const arrow of frame.arrows.splice(0)) ends[arrow] = index;
@@ -4037,7 +4052,8 @@ describe('this test file', () => {
         parameters = parameters?.filter((word) => /^[A-Za-z_$]/.test(word));
         if (parameters !== undefined) opens[line].push(...parameters);
         const index = tokens.length;
-        const members = token === '{' && (holdsMembers(code, place, tokens, last, opening) ?? false);
+        const members =
+          token === '{' && (holdsMembers(code, place, tokens, last, opening, frame?.members === true) ?? false);
         if (token === '(') {
           const head =
             frame?.members !== true &&
@@ -5122,6 +5138,103 @@ describe('this test file', () => {
     const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
     const sets = (line) => `line ${line} sets a time ratio that is not a call of timeRatio; ${takes}`;
     assert.deepEqual(ownTimeRatios(lines), [5, 10, 13, 21, 26, 32, 40, 47, 51, 57].map(sets));
+  });
+
+  test('reads the curly bracket after the colon of a label as opening a block, and one after a key in an object literal or the colon of a conditional as opening an object literal', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      // Labels after `{`, `;`, `}`, `)`, `]`, a line break after a name, `else`, `do`, the colon of a case clause
+      // or another label, and one in a value.
+      '    function g() {',
+      '      outer: {',
+      '        if (factor) {',
+      '          const y = factor * 2;',
+      '        }',
+      '      }',
+      '    }',
+      '    check(); inner: {',
+      '      while (factor) {',
+      '        const waited = factor * 2;',
+      '      }',
+      '    }',
+      '    after: {',
+      '      with (factor) {',
+      '        const inside = factor * 2;',
+      '      }',
+      '    }',
+      '    if (ready) headed: {',
+      '      switch (factor) {',
+      '        default:',
+      '          const chosen = factor * 2;',
+      '      }',
+      '    }',
+      '    const last = sizes[0]',
+      '    tail: {',
+      '      if (factor) {',
+      '        const checked = factor * 2;',
+      '      }',
+      '    }',
+      '    const size = count',
+      '    loose: {',
+      '      for (const item of factor) {',
+      '        const looped = factor * 2;',
+      '      }',
+      '    }',
+      '    if (ready) {',
+      '      check();',
+      '    } else otherwise: {',
+      '      while (factor) {',
+      '        const other = factor * 2;',
+      '      }',
+      '    }',
+      '    do repeated: {',
+      '      if (factor) {',
+      '        const again = factor * 2;',
+      '      }',
+      '    } while (ready);',
+      '    switch (kind) {',
+      "      case 'a': picked: {",
+      '        with (factor) {',
+      '          const kept = factor * 2;',
+      '        }',
+      '      }',
+      '    }',
+      '    first: second: {',
+      '      if (factor) {',
+      '        const nested = factor * 2;',
+      '      }',
+      '    }',
+      '    const labeled = () => { outer: { if (factor) { check(); } } };',
+      // A key in an object literal and the colon of a conditional come before an object literal.
+      '    const o = { inner: {',
+      '      if(factor) {',
+      '        const held = factor;',
+      '      },',
+      '    } };',
+      '    const fallen = ready ? fallback : {',
+      '      while(factor) {',
+      '        const waiting = factor;',
+      '      },',
+      '    };',
+      '    const deeper = ready ? kind ? a : b : {',
+      '      with(factor) {',
+      '        const within = factor;',
+      '      },',
+      '    };',
+    ];
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    const sets = (line) => `line ${line} sets a time ratio that is not a call of timeRatio; ${takes}`;
+    assert.deepEqual(ownTimeRatios(lines), [5, 11, 16, 22, 28, 34, 41, 46, 52, 58, 61].map(sets));
+    // A label at the start of the code.
+    const first = [
+      '    outer: {',
+      '      const factor = timeRatio(check, 32_000);',
+      '      if (factor) {',
+      '        const y = factor * 2;',
+      '      }',
+      '    }',
+    ];
+    assert.deepEqual(ownTimeRatios(first), [sets(4)]);
   });
 
   test('reads a statement with no semicolon as ending before a line that starts another, after any comment line', () => {
