@@ -3527,9 +3527,10 @@ describe('this test file', () => {
   // The start of a member of an object literal or a class body, where the search starts: after `{`, `}`, a
   // comma, a semicolon or a line break, as the first member, a member after another and a member after a
   // class field with no semicolon have before them, with no more between them than white space, `*`, `#`
-  // and the words `static`, `async` and `set`. A getter has no parameters. The group holds the sign or the
-  // line break.
-  const MEMBER_START = /(?<=([{},;\n])[\s*#]*(?:(?<![\w$])(?:static|async|set)[\s*#]*)*)/y;
+  // and the words `static`, `async` and `set`. A getter has no parameters. No member starts after `extends`
+  // and white space, so the call that a class extends is no member when it starts the line after `extends`,
+  // as `mixin(ratio) {` does after `make: class extends`. The group holds the sign or the line break.
+  const MEMBER_START = /(?<!(?<![\w$])extends\s+)(?<=([{},;\n])[\s*#]*(?:(?<![\w$])(?:static|async|set)[\s*#]*)*)/y;
 
   // A round bracket, where the search starts, that closes with the `{` of a block after it and no more than
   // white space between them. The group holds the white space. A call with a block or an object literal
@@ -3555,7 +3556,7 @@ describe('this test file', () => {
   // not in the head of a statement, as in `if (ratio) {`, or in a call with a block on the next line, as in
   // `record(ratio)` with `{` on the line after it. Nor do they after `for await`, whose `await` follows no
   // start of a member, in a call with a block or an object literal after it, as in `run(ratio) || {`, or in
-  // the class that `class Wide extends mixin(ratio) {` extends.
+  // the class that `class Wide extends mixin(ratio) {` extends, with a line break before `mixin` or not.
   function holdsParameters(code, tokens, places, open, close, opening, members) {
     const keyword = [open - 1, open - 2].find((at) => tokens[at] === 'function');
     if (keyword !== undefined) {
@@ -5235,6 +5236,43 @@ describe('this test file', () => {
       '    }',
     ];
     assert.deepEqual(ownTimeRatios(first), [sets(4)]);
+  });
+
+  test('reads the brackets of the call that a class extends as no parameters in an object literal or a class body, whether or not the call starts the line after extends', () => {
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    const sets = (line) => `line ${line} sets a time ratio that is not a call of timeRatio; ${takes}`;
+    // A class expression that is the value of a property or of a class field, with the call that it extends
+    // on the line of `extends` or on the next one.
+    const property = (head) => [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const o = {',
+      ...head,
+      '          grow() {',
+      '            const g = factor * 2;',
+      '          }',
+      '        },',
+      '    };',
+    ];
+    const field = (head) => [
+      '    const factor = timeRatio(check, 32_000);',
+      '    class Outer {',
+      ...head,
+      '          grow() {',
+      '            const g = factor * 2;',
+      '          }',
+      '        };',
+      '    }',
+    ];
+    assert.deepEqual(ownTimeRatios(property(['      make: class extends mixin(factor) {'])), [2, 5].map(sets));
+    assert.deepEqual(ownTimeRatios(property(['      make: class extends', '        mixin(factor) {'])), [6].map(sets));
+    assert.deepEqual(ownTimeRatios(field(['      make = class extends mixin(factor) {'])), [3, 5].map(sets));
+    // A comment line between `extends` and the call.
+    const commented = field([
+      '      make = class extends',
+      '        // a mixin',
+      '        mixin(factor) {',
+    ]);
+    assert.deepEqual(ownTimeRatios(commented), [7].map(sets));
   });
 
   test('reads a statement with no semicolon as ending before a line that starts another, after any comment line', () => {
