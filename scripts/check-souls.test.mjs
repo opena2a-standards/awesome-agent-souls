@@ -3510,37 +3510,112 @@ describe('this test file', () => {
   const STATEMENT_HEAD = /^\s*(?:else\s+)?(?:if|for|while)\s*\(|^\s*else\b/;
 
   // The words that come before the round brackets of the head of a statement, whose block is not the body
-  // of a function, as `if` does in `if (ready) {` and `await` does in `for await (const item of items) {`.
-  const STATEMENT_WORDS = new Set(['if', 'for', 'await', 'while', 'switch', 'catch', 'with']);
+  // of a function and binds no name in them, as `if` does in `if (ready) {`. A `for` loop binds the names
+  // that `const`, `let` or `var` declares in its head, which blockParameters reads itself, and no other. A
+  // catch clause binds the name in its brackets as a parameter list does, and the `await` of `for await (`
+  // follows `for`, where no member starts, so neither `catch` nor `await` is one of them. In an object
+  // literal or a class body, each of them may name a method.
+  const STATEMENT_WORDS = new Set(['if', 'for', 'while', 'switch', 'with']);
 
-  // A round bracket, where the search starts, that follows the name of a member of an object literal or a
-  // class body: a name after `{`, `}`, a comma or a semicolon, as the first member and a member after
-  // another have before them, with no more between them than white space, `*`, `#` and the words
-  // `static`, `async` and `set`. A getter has no parameters. The group holds the name.
-  const AFTER_MEMBER_NAME = /(?<=[{},;][\s*#]*(?:(?:static|async|set)[\s*#]*)*([A-Za-z_$][\w$]*)\s*)\(/y;
+  // A round bracket, where the search starts, and the name or number before it, if any, with the white
+  // space between them, as `scale` and the space are in `scale (ratio)`. The groups hold the name and the
+  // white space. A string is blank in the code, so a method named with one, as in `'scale'(ratio) {`, has
+  // no name here. The name is read whole, so a name made of the words that MEMBER_START reads, as `setset`
+  // is, is read once and not once for each way of splitting it into them.
+  const NAME_BEFORE = /(?<=(?<![\w$])([\w$]*)(\s*))\(/y;
 
-  // A round bracket, where the search starts, that closes with the `{` of a block after it on its line
-  // and no more than spaces between them. A call with a block or an object literal after it has an
-  // operator, a colon, a comma, a semicolon or a line break between them.
-  const BEFORE_BLOCK = /\) *\{/y;
+  // The start of a member of an object literal or a class body, where the search starts: after `{`, `}`, a
+  // comma, a semicolon or a line break, as the first member, a member after another and a member after a
+  // class field with no semicolon have before them, with no more between them than white space, `*`, `#`
+  // and the words `static`, `async` and `set`. A getter has no parameters. The group holds the sign or the
+  // line break.
+  const MEMBER_START = /(?<=([{},;\n])[\s*#]*(?:(?<![\w$])(?:static|async|set)[\s*#]*)*)/y;
+
+  // A round bracket, where the search starts, that closes with the `{` of a block after it and no more than
+  // white space between them. The group holds the white space. A call with a block or an object literal
+  // after it has an operator, a colon, a comma or a semicolon between them, or a line break outside an
+  // object literal or a class body.
+  const BEFORE_BLOCK = /\)(\s*)\{/y;
+
+  // A name, where the search starts, that a dot comes before, with white space between them or not, as
+  // `function` does in `api.function(ratio)`.
+  const AFTER_DOT = /(?<=\.\s*)/y;
 
   // Returns whether the round brackets from token `open` to token `close` of `tokens`, which a block
-  // follows, hold the parameters of a function whose body is the block. `places` holds where each token
-  // starts in `code`. They do after `function`, with a name between them or not, as in
-  // `function scale(ratio) {` and `function (ratio) {`. They do in a method shorthand or a class method, as
-  // in `scale(ratio) {`, when AFTER_MEMBER_NAME reads the opening bracket, BEFORE_BLOCK reads the closing
-  // one and the name is no statement word. So they do not in the head of a statement, as in
-  // `if (ratio) {` and `for await (const item of ratio) {`, in a call with a block or an object literal
-  // after it, as in `run(ratio) || {`, or in the class that `class Wide extends mixin(ratio) {` extends.
-  // Nor do they in a method that those two do not read, such as one whose name is computed, a number or
-  // a string with no word before it, one after a class field `size = 1` with no semicolon after it, and
-  // one whose block starts on the next line.
-  function holdsParameters(code, tokens, places, open, close) {
-    if (tokens[open - 1] === 'function' || tokens[open - 2] === 'function') return true;
-    AFTER_MEMBER_NAME.lastIndex = places[open];
+  // follows, hold the parameters of a function whose body is the block, or the name that a catch clause
+  // binds. `places` holds where each token starts in `code`, `opening` the index of the opening bracket of
+  // each closing bracket, and `members` whether the brackets lie in an object literal or a class body, as
+  // holdsMembers reads the curly bracket around them. They do after `function`, with a name between them or
+  // not, as in `function scale(ratio) {` and `function (ratio) {`, unless a dot comes before `function`, as
+  // in `api.function(ratio) || {`. They do in a method shorthand, a class method or a catch clause, as in
+  // `scale(ratio) {`, `[key](ratio) {`, `'scale'(ratio) {` and `} catch (ratio) {`, when the name, number,
+  // string or computed key before the opening bracket follows the start of a member, as MEMBER_START reads
+  // it, and BEFORE_BLOCK reads the closing one. Outside an object literal or a class body, a statement word,
+  // a line break that starts a member and a block that starts on the next line read no method. So they do
+  // not in the head of a statement, as in `if (ratio) {`, or in a call with a block on the next line, as in
+  // `record(ratio)` with `{` on the line after it. Nor do they after `for await`, whose `await` follows no
+  // start of a member, in a call with a block or an object literal after it, as in `run(ratio) || {`, or in
+  // the class that `class Wide extends mixin(ratio) {` extends.
+  function holdsParameters(code, tokens, places, open, close, opening, members) {
+    const keyword = [open - 1, open - 2].find((at) => tokens[at] === 'function');
+    if (keyword !== undefined) {
+      AFTER_DOT.lastIndex = places[keyword];
+      if (!AFTER_DOT.test(code)) return true;
+    }
+    // Where the name of a member would start: at the opening bracket of a computed key that no more than
+    // white space comes after, or else at the name, number or string before the round bracket.
+    let start;
+    let name;
+    if (tokens[open - 1] === ']' && code.slice(places[open - 1] + 1, places[open]).trim() === '') {
+      start = places[opening[open - 1]];
+    } else {
+      NAME_BEFORE.lastIndex = places[open];
+      const found = NAME_BEFORE.exec(code);
+      if (found !== null) [start, name] = [places[open] - found[2].length - found[1].length, found[1]];
+    }
+    if (start === undefined || (!members && STATEMENT_WORDS.has(name))) return false;
+    MEMBER_START.lastIndex = start;
     BEFORE_BLOCK.lastIndex = places[close];
-    const name = AFTER_MEMBER_NAME.exec(code)?.[1];
-    return name !== undefined && !STATEMENT_WORDS.has(name) && BEFORE_BLOCK.test(code);
+    const after = MEMBER_START.exec(code)?.[1];
+    const space = BEFORE_BLOCK.exec(code)?.[1];
+    return after !== undefined && space !== undefined && (members || (after !== '\n' && /^ *$/.test(space)));
+  }
+
+  // The sign, `=>` or word that the code before a curly bracket, where the search starts, ends with, other
+  // than white space.
+  const BEFORE_CURLY = /(?<=(=>|[\w$]+|[^\s\w$])\s*)/y;
+
+  // The words after which a curly bracket opens an object literal, as `return` does in `return { m() {} }`.
+  const VALUE_WORDS = new Set(['return', 'yield', 'await', 'throw', 'typeof', 'void', 'delete', 'in', 'of']);
+
+  // A curly bracket, where the search starts, after the colon of a case or default clause of a switch, as in
+  // `case 'a': {`, whose block holds statements.
+  const AFTER_CASE = /(?<=(?:(?<![\w$])case(?![\w$])[^;{}:]*|(?<![\w$])default\s*):\s*)/y;
+
+  // Returns whether the curly bracket that starts at `place` in `code`, after token `last` of `tokens`, opens
+  // an object literal or a class body, whose members may be methods, rather than a block, or undefined when
+  // no code comes before it. `opening` holds the index of the opening bracket of each closing bracket. It
+  // opens a block after `=>`, `;`, `{`, `}` and the colon of a case or default clause, and an object literal
+  // after a word in VALUE_WORDS or any other sign but a closing bracket. After a name or a closing bracket,
+  // it opens a class body when `class` or `extends` comes before them with no more than names and brackets
+  // between, as in `class Scaler {` and `class Wide extends mixin(ratio) {`, and a block otherwise, as in
+  // `try {` and `if (ratio) {`.
+  function holdsMembers(code, place, tokens, last, opening) {
+    BEFORE_CURLY.lastIndex = place;
+    const before = BEFORE_CURLY.exec(code)?.[1];
+    if (before === undefined) return undefined;
+    if (before === '=>' || /^[;{}]$/.test(before)) return false;
+    if (before === ':') {
+      AFTER_CASE.lastIndex = place;
+      return !AFTER_CASE.test(code);
+    }
+    if (VALUE_WORDS.has(before) || !/^[\w$)\]]/.test(before)) return true;
+    for (let at = last; at >= 0; at -= 1) {
+      if (tokens[at] === 'class' || tokens[at] === 'extends') return true;
+      if (tokens[at] === ')' || tokens[at] === ']') at = opening[at] ?? -1;
+      else if (!/^[\w$]/.test(tokens[at])) return false;
+    }
+    return false;
   }
 
   // A name in code that nothing calls and that is not a property, as `timeRatio` is in `[timeRatio]`.
@@ -3733,26 +3808,34 @@ describe('this test file', () => {
   }
 
   // Returns the names that `code` takes, leaving out the parameters of each arrow function in it, and of
-  // each function or method with a block that holdsParameters reads as its body, and each name in the
-  // body that is one of them, as the function sets those itself. The body of an arrow function runs on to
-  // the comma, semicolon or closing bracket after it that is outside the brackets in it, and a block runs
-  // on to the bracket that closes it.
+  // each function, method or catch clause with a block that holdsParameters reads as its body, and each
+  // name in the body that is one of them, as the function sets those itself. The body of an arrow function
+  // runs on to the comma, semicolon or closing bracket after it that is outside the brackets in it, and a
+  // block runs on to the bracket that closes it.
   function takenNames(code) {
     // Each token of the code and where it starts.
     const found = [...code.matchAll(/\w+|=>|[()[\]{},;]/g)];
     const tokens = found.map(([token]) => token);
     const places = found.map(({ index }) => index);
     // The index of the opening bracket of each closing bracket, of the closing bracket of each opening
-    // bracket, and of the token that ends the body of each arrow function.
+    // bracket, of the token that ends the body of each arrow function, and of the opening bracket around
+    // each opening bracket, and whether each curly bracket opens an object literal or a class body, as
+    // holdsMembers reads it. The code is a value, so a curly bracket that no code comes before opens an
+    // object literal.
     const opens = [];
     const closes = [];
     const ends = [];
+    const around = [];
+    const members = [];
     const frames = [{ arrows: [] }];
     tokens.forEach((token, index) => {
       const frame = frames.at(-1);
       if (token === '=>') frame.arrows.push(index);
-      else if (token === '(' || token === '[' || token === '{') frames.push({ open: index, arrows: [] });
-      else if (/^[,;)\]}]$/.test(token)) {
+      else if (token === '(' || token === '[' || token === '{') {
+        around[index] = frame.open;
+        if (token === '{') members[index] = holdsMembers(code, places[index], tokens, index - 1, opens) ?? true;
+        frames.push({ open: index, arrows: [] });
+      } else if (/^[,;)\]}]$/.test(token)) {
         for (const arrow of frame.arrows.splice(0)) ends[arrow] = index;
         if (/^[)\]}]$/.test(token) && frames.length > 1) {
           opens[index] = frames.pop().open;
@@ -3776,7 +3859,7 @@ describe('this test file', () => {
         token === '{' &&
         tokens[last] === ')' &&
         opens[last] !== undefined &&
-        holdsParameters(code, tokens, places, opens[last], last)
+        holdsParameters(code, tokens, places, opens[last], last, opens, members[around[opens[last]]] === true)
       ) {
         first = opens[last];
         end = closes[index];
@@ -3923,7 +4006,8 @@ describe('this test file', () => {
     // the start of the head of a `for` loop, before `const`, `let` or `var`, and `off` where no name is
     // bound. `key` is true in a curly bracket that destructures where a name may be a key, which a colon
     // follows, and `name` holds the name read last where a name is bound, until the token after it shows
-    // whether it is a key.
+    // whether it is a key. `members` is true in a curly bracket that opens an object literal or a class body,
+    // as holdsMembers reads it, where a round bracket after `for` opens the parameters of a method.
     const brackets = [];
     let line = 0;
     for (const { 0: token, index: place } of code.matchAll(/[\w$]+|=>|[=,:;()[\]{}\n]/g)) {
@@ -3945,7 +4029,7 @@ describe('this test file', () => {
           token === '{' &&
           tokens[last] === ')' &&
           before !== undefined &&
-          (holdsParameters(code, tokens, places, before, last) ||
+          (holdsParameters(code, tokens, places, before, last, opening, frame?.members === true) ||
             [tokens[before - 1], tokens[before - 2]].some((word) => /^(?:for|catch)$/.test(word ?? '')))
         ) {
           parameters = lists[last] ?? [];
@@ -3953,13 +4037,16 @@ describe('this test file', () => {
         parameters = parameters?.filter((word) => /^[A-Za-z_$]/.test(word));
         if (parameters !== undefined) opens[line].push(...parameters);
         const index = tokens.length;
+        const members = token === '{' && (holdsMembers(code, place, tokens, last, opening) ?? false);
         if (token === '(') {
-          const head = tokens[last] === 'for' || (tokens[last] === 'await' && tokens[last - 1] === 'for');
+          const head =
+            frame?.members !== true &&
+            (tokens[last] === 'for' || (tokens[last] === 'await' && tokens[last - 1] === 'for'));
           brackets.push({ index, names: [], state: head ? 'head' : 'bind', head });
         } else if (parameters === undefined && frame?.state === 'bind' && frame.key !== true) {
-          brackets.push({ index, names: frame.names, state: 'bind', key: token === '{' ? true : undefined });
+          brackets.push({ index, names: frame.names, state: 'bind', key: token === '{' ? true : undefined, members });
         } else {
-          brackets.push({ index, state: 'off', parameters });
+          brackets.push({ index, state: 'off', parameters, members });
         }
       } else if (/^[)\]}]$/.test(token)) {
         if (brackets.length > 0) {
@@ -4856,6 +4943,187 @@ describe('this test file', () => {
     ]);
   });
 
+  test('reads the round brackets after if, for, while, switch or with as the head of a statement, and those of a catch clause as binding its name', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    switch (factor) {',
+      '      default:',
+      '        const chosen = factor * 2;',
+      '    }',
+      '    check();',
+      '    with (factor) {',
+      '      const inside = factor * 2;',
+      '    }',
+      // A value takes the names in the head of a statement that it holds, and no name that a catch clause binds.
+      '    const checked = () => { if (factor) { check(); } };',
+      '    const looped = () => { for (const item of factor) { check(item); } };',
+      '    const waited = () => { while (factor) { check(); } };',
+      '    const chose = () => { switch (factor) { default: check(); } };',
+      '    const within = () => { with (factor) { check(); } };',
+      '    const caught = () => { try { check(); } catch (factor) { return factor; } };',
+    ];
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    const sets = (line) => `line ${line} sets a time ratio that is not a call of timeRatio; ${takes}`;
+    assert.deepEqual(ownTimeRatios(lines), [4, 8, 10, 11, 12, 13, 14].map(sets));
+  });
+
+  test('reads the brackets after a property named function or a property of one, and square brackets after the word function, as no parameters', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const loose = api.function(factor) || {};',
+      '    const spaced = api. function(factor) || {};',
+      '    const looser = api.function.run(factor) || {};',
+      // A block or an object literal after the square brackets, read as a value and as a block.
+      '    const listed = { function: [factor] || {} };',
+      '    run({ function: [factor] || {',
+      '      inner: () => {',
+      '        const half = factor;',
+      '      },',
+      '    } });',
+    ];
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    const sets = (line) => `line ${line} sets a time ratio that is not a call of timeRatio; ${takes}`;
+    assert.deepEqual(ownTimeRatios(lines), [2, 3, 4, 5, 8].map(sets));
+  });
+
+  test('reads no parameter of a method named with a computed key, a string, a number or a statement word, or with its block on the next line, as a time ratio that a line of its block takes', () => {
+    // The method shorthand example above with each of these methods in place of `scale(factor) {`.
+    const example = (method) => [
+      '    const factor = timeRatio(check, 32_000);',
+      '    const o = {',
+      ...method.map((line) => `      ${line}`),
+      '        const inner = factor;',
+      '      },',
+      '    };',
+    ];
+    const methods = [
+      ['[key](factor) {'],
+      ["'scale'(factor) {"],
+      ['1(factor) {'],
+      ['$scale(factor) {'],
+      ['a$b(factor) {'],
+      ...['if', 'for', 'while', 'switch', 'with', 'catch', 'await'].map((word) => [`${word}(factor) {`]),
+      ['scale(factor)', '{'],
+    ];
+    assert.deepEqual(
+      methods.map((method) => [method.join(' '), ownTimeRatios(example(method))]),
+      methods.map((method) => [method.join(' '), []]),
+    );
+  });
+
+  test('reads no parameter of a method after a class field with no semicolon, or of one named with a statement word or with its block on the next line in a class, an argument, a property or a returned object, as a time ratio that a line of its block takes', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    class Scaler {',
+      '      size = 1',
+      '      grow(factor) {',
+      '        const grown = factor * 2;',
+      '      }',
+      '      static shrink(factor)',
+      '      {',
+      '        const less = factor;',
+      '      }',
+      '    }',
+      '    class Wide extends mixin(other) {',
+      '      if(factor) {',
+      '        const checked = factor;',
+      '      }',
+      '    }',
+      '    const Wider = class extends mixins[0] {',
+      '      with(factor) {',
+      '        const inside = factor;',
+      '      }',
+      '    };',
+      '    run({',
+      '      while(factor) {',
+      '        const waited = factor;',
+      '      },',
+      '      inner: {',
+      '        switch(factor) {',
+      '          const chosen = factor;',
+      '        },',
+      '      },',
+      '    });',
+      '    function make() {',
+      '      return {',
+      '        for(factor) {',
+      '          const looped = factor;',
+      '        },',
+      '      };',
+      '    }',
+    ];
+    assert.deepEqual(ownTimeRatios(lines), []);
+  });
+
+  test('reads no method from a statement word, a name that starts a line or a block on the next line in a function body, a clause of a switch or another block', () => {
+    const lines = [
+      '    const factor = timeRatio(check, 32_000);',
+      '    items.forEach(() => {',
+      '      record(factor)',
+      '      {',
+      '        const last = factor * 2;',
+      '      }',
+      '    });',
+      '    function run() {',
+      '      if (factor) {',
+      '        const checked = factor * 2;',
+      '      } else {',
+      '        while (factor) {',
+      '          const waited = factor * 2;',
+      '        }',
+      '      }',
+      '    }',
+      '    switch (kind) {',
+      "      case 'a': {",
+      '        switch (factor) {',
+      '          default:',
+      '            const chosen = factor * 2;',
+      '        }',
+      '      }',
+      '      default: {',
+      '        for (const item of factor) {',
+      '          const looped = factor * 2;',
+      '        }',
+      '      }',
+      '    }',
+      '    try {',
+      '      with (factor) {',
+      '        const inside = factor * 2;',
+      '      }',
+      '    } finally {',
+      '      check();',
+      '    }',
+      // Blocks after a semicolon, a closing curly bracket and an opening one.
+      '    check();',
+      '    {',
+      '      if (factor) {',
+      '        const first = factor * 2;',
+      '      }',
+      '    }',
+      '    {',
+      '      {',
+      '        record(factor)',
+      '        {',
+      '          const later = factor * 2;',
+      '        }',
+      '      }',
+      '      while (factor) {',
+      '        const again = factor * 2;',
+      '      }',
+      '    }',
+      // A name that starts a line starts no member outside an object literal or a class body.
+      '    class Wide extends',
+      '      mixin(factor) {',
+      '      grow() {',
+      '        const grown = factor * 2;',
+      '      }',
+      '    }',
+    ];
+    const takes = 'a value that takes factor, a time ratio, is read as a time ratio';
+    const sets = (line) => `line ${line} sets a time ratio that is not a call of timeRatio; ${takes}`;
+    assert.deepEqual(ownTimeRatios(lines), [5, 10, 13, 21, 26, 32, 40, 47, 51, 57].map(sets));
+  });
+
   test('reads a statement with no semicolon as ending before a line that starts another, after any comment line', () => {
     const lines = [
       '    const ratio = timeRatio(check, 32_000)',
@@ -5002,6 +5270,22 @@ describe('this test file', () => {
     for (const make of makers) {
       const ratio = timeRatio(timer(make), 4_000);
       assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the functions took ${ratio.toFixed(2)} times as long`);
+    }
+  });
+
+  test('checks a call of a long run of set, async or static, with an object literal after it, in linear time', () => {
+    // Returns a function that takes the time to check a line that calls a name made of the given number of
+    // `word`s, with an object literal after the call. Trying each way of splitting the name into those
+    // words, which may come before the name of a method, took time that grew with the square of the length.
+    const timer = (word) => (count) => {
+      const lines = [`    const x = ${word.repeat(count)}(a) || {};`];
+      const start = performance.now();
+      assert.deepEqual(ownTimeRatios(lines), []);
+      return performance.now() - start;
+    };
+    for (const word of ['set', 'async', 'static']) {
+      const ratio = timeRatio(timer(word), 16_000);
+      assert.ok(ratio < LINEAR_TIME_RATIO, `sixteen times the length took ${ratio.toFixed(2)} times as long`);
     }
   });
 
