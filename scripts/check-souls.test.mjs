@@ -379,15 +379,33 @@ function mainRef(dir) {
   );
 }
 
-// Returns the merge commits in the history of `revision`, newest first, each as its hash, a space and
-// its subject.
-function mergeCommits(dir, revision) {
-  const { status, stdout, stderr } = spawnSync('git', ['log', '--merges', '--format=%H %s', revision, '--'], {
+// Returns the merge commits in the history of any of the `revisions`, newest first, each as its hash, a
+// space and its subject.
+function mergeCommits(dir, ...revisions) {
+  const { status, stdout, stderr } = spawnSync('git', ['log', '--merges', '--format=%H %s', ...revisions, '--'], {
     cwd: dir,
     encoding: 'utf8',
   });
   assert.equal(status, 0, `git log failed: ${stderr}`);
   return stdout.split('\n').filter(Boolean);
+}
+
+// Returns the merge commits, as mergeCommits does, in both the history of `revision` and the history of
+// the commit checked out in the clone at `dir`. CONTRIBUTING.md in the work tree is that commit's, with
+// any edits since, so a merge commit that only `revision` carries is left out: a fork's own main carries
+// one when the repository it was forked from is merged into it. A merge commit that only the checked-out
+// commit carries is left out too: a branch carries one when main is merged into it, and the squash merge
+// of the branch leaves that merge commit off main.
+function commonMergeCommits(dir, revision) {
+  // git merge-base --all prints the best common ancestors of the two, and each commit both histories carry
+  // is in the history of one of them. It exits with status 1 when the two histories share no commit.
+  const { status, stdout, stderr } = spawnSync('git', ['merge-base', '--all', revision, 'HEAD'], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  if (status === 1) return [];
+  assert.equal(status, 0, `git merge-base failed: ${stderr}`);
+  return mergeCommits(dir, ...stdout.split('\n').filter(Boolean));
 }
 
 // Returns the merge commits that `guide` does not name. The guide names a commit by writing the first
@@ -397,9 +415,10 @@ function unnamedMergeCommits(guide, commits) {
   return commits.filter((commit) => !named.some((hash) => commit.startsWith(hash)));
 }
 
-describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && 'git did not run' }, () => {
+describe('mainRef, mergeCommits, commonMergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && 'git did not run' }, () => {
   let repo;
   let git;
+  let commit;
   let merge;
   let squashed;
   let forkMerge;
@@ -418,7 +437,7 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
     git('init', '--quiet');
     // Every commit has the empty tree, so the history is built without a work tree or an index.
     const tree = git('mktree');
-    const commit = (subject, ...parents) =>
+    commit = (subject, ...parents) =>
       git('commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', subject);
     const base = commit('Base');
     merge = commit('Merge side', commit('Other', base), commit('Side', base));
@@ -453,6 +472,40 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
     assert.deepEqual(mergeCommits(repo, mainRef(repo)), [`${merge} Merge side`]);
   });
 
+  test("commonMergeCommits leaves out a merge commit that a fork's own main carries and the checked-out commit does not", () => {
+    // In a clone of a fork with no upstream remote, origin/main is the fork's main. The commit checked
+    // out here is a commit of the repository the fork was made from, which does not carry the fork's merge.
+    git('update-ref', '--no-deref', 'HEAD', squashed);
+    assert.deepEqual(commonMergeCommits(repo, 'refs/remotes/origin/main'), [`${merge} Merge side`]);
+  });
+
+  test('commonMergeCommits leaves out a merge commit that only the checked-out commit carries, and lists one both carry', () => {
+    // The fork's merge commit stands for one that only a branch carries, as a merge of main into it is.
+    // Given the fork's own main, both histories carry it, as they do when the fork's main is checked out.
+    git('update-ref', '--no-deref', 'HEAD', forkMerge);
+    assert.deepEqual(commonMergeCommits(repo, UPSTREAM_MAIN), [`${merge} Merge side`]);
+    assert.deepEqual(commonMergeCommits(repo, 'refs/remotes/origin/main'), [
+      `${forkMerge} Merge upstream`,
+      `${merge} Merge side`,
+    ]);
+  });
+
+  test('commonMergeCommits lists the merge commits of each merge base, and none for histories that share no commit', () => {
+    // Two merges of the same two merge commits, in the two orders, share two merge bases, the two merge
+    // commits, and neither base is in the history of the other.
+    const left = commit('Left', merge);
+    const right = commit('Right', merge);
+    const mergeLeft = commit('Merge right into left', left, right);
+    const mergeRight = commit('Merge left into right', right, left);
+    git('update-ref', '--no-deref', 'HEAD', commit('Cross two', mergeRight, mergeLeft));
+    assert.deepEqual(
+      commonMergeCommits(repo, commit('Cross one', mergeLeft, mergeRight)).sort(),
+      [`${mergeLeft} Merge right into left`, `${mergeRight} Merge left into right`, `${merge} Merge side`].sort(),
+    );
+    git('update-ref', '--no-deref', 'HEAD', commit('Unrelated'));
+    assert.deepEqual(commonMergeCommits(repo, 'refs/remotes/origin/main'), []);
+  });
+
   test('mainRef names upstream/main where the clone has one, then origin/main, then main, then nothing', () => {
     assert.equal(mainRef(repo), UPSTREAM_MAIN);
     git('update-ref', '-d', UPSTREAM_MAIN);
@@ -466,7 +519,8 @@ describe('mainRef, mergeCommits and unnamedMergeCommits', { skip: !GIT_RUNS && '
 
 const MAIN_REF = NOT_A_CLONE ? undefined : mainRef(repoRoot);
 // Nothing in a clone of a fork with no upstream remote tells it from a clone of the repository the fork
-// was made from, so a merge commit of the fork's own fails the test there, and the failure says what to do.
+// was made from, so a merge commit of the fork's own fails the test there when the checked-out commit
+// carries it, as the fork's main and a branch made from it after the merge do. The failure says what to do.
 const FORK_HINT =
   MAIN_REF === UPSTREAM_MAIN
     ? ''
@@ -525,7 +579,7 @@ describe('this repository', () => {
   });
 
   test(
-    'CONTRIBUTING.md, which says pull requests are squash-merged, names every merge commit on main',
+    'CONTRIBUTING.md, which says pull requests are squash-merged, names every merge commit on main that the checked-out commit carries',
     {
       skip:
         !MAIN_REF &&
@@ -535,9 +589,9 @@ describe('this repository', () => {
       const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
       assert.match(guide, /squash-merged/);
       assert.deepEqual(
-        unnamedMergeCommits(guide, mergeCommits(repoRoot, MAIN_REF)),
+        unnamedMergeCommits(guide, commonMergeCommits(repoRoot, MAIN_REF)),
         [],
-        `CONTRIBUTING.md does not name a merge commit in the history of ${MAIN_REF}${FORK_HINT}`,
+        `CONTRIBUTING.md does not name a merge commit in the history of both ${MAIN_REF} and HEAD${FORK_HINT}`,
       );
     },
   );
