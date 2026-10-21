@@ -387,8 +387,9 @@ const REPOSITORY_PATHS = ['opena2a-standards/awesome-agent-souls', 'opena2a-org/
 // ssh://git@github.com/owner/name.git and git@github.com:owner/name.git do, with or without .git and a slash
 // at the end. The host is not read, so a URL with an SSH host alias in place of github.com names the same
 // repository. The owner and the name are read as letters, digits, `_`, `.` and `-`, and the group holds
-// owner/name. A local path, a file URL and a path with other than two parts name none.
-const REMOTE_URL = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/]*@)?[^@/]+\/|(?:[^@/:]*@)?[^@/:]+:)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i;
+// owner/name. A local path, a file URL, with or without a host, and a path with other than two parts name
+// none.
+const REMOTE_URL = /^(?:(?!file:)[a-z][a-z\d+.-]*:\/\/(?:[^@/]*@)?[^@/]+\/|(?:[^@/:]*@)?[^@/:]+:)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i;
 
 // Returns the owner/name, in lowercase, of the repository that a remote URL names, or undefined.
 function remoteRepository(url) {
@@ -469,6 +470,8 @@ describe('remoteRepository', () => {
       'C:\\Users\\example/awesome-agent-souls',
       'C:/Users/example/awesome-agent-souls',
       'file:///home/example/awesome-agent-souls',
+      'file://localhost/srv/awesome-agent-souls',
+      'FILE://localhost/example-user/awesome-agent-souls.git',
       'https://github.com/awesome-agent-souls.git',
       'https://example.com/github.com/example-user/awesome-agent-souls.git',
       'https://github.com/example-user/awesome-agent-souls/tree/main',
