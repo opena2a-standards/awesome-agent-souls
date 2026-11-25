@@ -102,6 +102,7 @@ Souls from different dimensions combine into one: [Combining Souls](docs/combini
 - [Catalog](docs/catalog.md): every soul by dimension, the starter examples and the templates
 - [Where SOUL.md Lives](docs/where-soul-md-lives.md): placement in a project, how AI tools discover it, fleets and monorepos
 - [Taxonomy](docs/taxonomy.md): the five dimensions, and how a soul differs from a skill
+- [Offline Catalog Page](docs/offline-catalog-page.md): building the whole catalog into one HTML file you can read, search and share without a server
 - [Combining Souls](docs/combining-souls.md): layering souls from several dimensions into one identity
 - [Soul Integrity](docs/soul-integrity.md): signing soul files and verifying them before each session
 - [Soul Hardening](docs/soul-hardening.md): scanning soul files for prompt injection
